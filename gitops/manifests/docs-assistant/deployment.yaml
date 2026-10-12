@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docs-assistant
+  labels: {app: docs-assistant}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: docs-assistant}
+  template:
+    metadata:
+      labels: {app: docs-assistant}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001}
+      containers:
+        - name: docs-assistant
+          image: ghcr.io/YOUR_GITHUB_USER/idp-docs-assistant:latest
+          ports: [{name: http, containerPort: 8000}]
+          env:
+            - {name: GATEWAY_URL, value: "http://llm-gateway.llm-gateway.svc.cluster.local:8000"}
+          readinessProbe: {httpGet: {path: /healthz, port: http}, initialDelaySeconds: 5, periodSeconds: 10}
+          livenessProbe: {httpGet: {path: /healthz, port: http}, initialDelaySeconds: 15, periodSeconds: 20}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}

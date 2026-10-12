@@ -1,0 +1,556 @@
+# AI-Powered Internal Developer Platform
+
+[![CI](https://github.com/your-org/ai-idp/actions/workflows/ci.yaml/badge.svg)](https://github.com/your-org/ai-idp/actions)
+[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![ArgoCD](https://img.shields.io/badge/GitOps-ArgoCD-orange.svg)](https://argo-cd.readthedocs.io/)
+[![Terraform](https://img.shields.io/badge/IaC-Terraform-purple.svg)](https://www.terraform.io/)
+[![Docker](https://img.shields.io/badge/container-Docker-blue.svg)](https://www.docker.com/)
+
+> A deployable AI-powered Internal Developer Platform prototype: documentation RAG, deployment-risk scoring, a shared LLM gateway, AIOps incident handling, and an operations console with environment health, workload logs, cost planning, and reports.
+
+For a beginner-friendly explanation and interview Q&A, see [README_INTERVIEW.md](README_INTERVIEW.md).
+
+---
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                          AI Internal Developer Platform                          │
+│                                                                                  │
+│  Developer                                                                       │
+│     │  git push                                                                  │
+│     ▼                                                                            │
+│  ┌────────────────┐    ┌──────────────────────────────────────────────────────┐ │
+│  │  GitHub Actions│───▶│                    GitOps Repo                       │ │
+│  │  CI Pipeline   │    │  gitops/apps/  ←  ArgoCD watches  →  gitops/manifests│ │
+│  │ test·build·scan│    └───────────────────────┬──────────────────────────────┘ │
+│  └────────────────┘                            │ ArgoCD syncs                   │
+│                                                ▼                                │
+│  ┌─────────────────────────────────────────────────────────────────────────┐    │
+│  │                    Kubernetes Cluster (AWS EKS / kind)                   │    │
+│  │                                                                         │    │
+│  │  ┌─────────────┐   ┌──────────────────────────────────────────────┐    │    │
+│  │  │   Portal    │──▶│              Four AI Services                │    │    │
+│  │  │ FastAPI +   │   │                                              │    │    │
+│  │  │ Three.js UI │   │                                              │    │    │
+│  │  │  :8501      │   │  ┌─────────────┐   ┌──────────────────────┐ │    │    │
+│  │  │             │   │  │docs-assistant│   │   model-serving      │ │    │    │
+│  │  │  ·Docs Tab  │──▶│  │  RAG + TF-IDF│   │  scikit-learn risk  │ │    │    │
+│  │  │  ·Risk Tab  │──▶│  │   :8000      │   │   prediction :8000  │ │    │    │
+│  │  │  ·LLM Tab   │──▶│  └──────┬───────┘   └──────────────────────┘ │    │    │
+│  │  │  ·Incidents │──▶│         │           ┌──────────────────────┐ │    │    │
+│  │  │  ·Grafana   │   │         │           │    llm-gateway       │ │    │    │
+│  │  └─────────────┘   │  ┌──────▼──────────▶│  cache·cost·tokens  │ │    │    │
+│  │                    │  │  All LLM calls   │   :8000             │ │    │    │
+│  │                    │  └─────────────────▶│                     │ │    │    │
+│  │                    │                     └──────────────────────┘ │    │    │
+│  │                    │  ┌──────────────────────────────────────────┐ │    │    │
+│  │                    │  │         aiops-agent                      │ │    │    │
+│  │                    │  │  watches Prometheus → opens incidents    │ │    │    │
+│  │                    │  │  → (opt-in) restarts bad deployments     │ │    │    │
+│  │                    │  │   :8000                                  │ │    │    │
+│  │                    │  └──────────────────────────────────────────┘ │    │    │
+│  │                    └──────────────────────────────────────────────┘    │    │
+│  │                                                                         │    │
+│  │  ┌─────────────────────────────────────────────────────────────────┐   │    │
+│  │  │            Observability Stack                                  │   │    │
+│  │  │   Prometheus :9090  ◀──── /metrics from all 4 services         │   │    │
+│  │  │   Grafana    :3000  ◀──── Prometheus datasource                │   │    │
+│  │  │   Mission Control Dashboard: latency · cost · risk · incidents │   │    │
+│  │  └─────────────────────────────────────────────────────────────────┘   │    │
+│  └─────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                  │
+│  ┌───────────────────────────────────────────────────────────────────────────┐  │
+│  │  Terraform (AWS VPC + EKS + S3) ─ provisions the cluster above            │  │
+│  └───────────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Interactive Mermaid Diagram
+
+```mermaid
+flowchart TD
+    Dev["👨‍💻 Developer\ngit push"]
+    CI["⚙️ GitHub Actions\ntest · build · scan · push image"]
+    Repo["📁 GitOps Repo\ngitops/apps/ & gitops/manifests/"]
+    Argo["🔄 ArgoCD\nApp-of-Apps pattern"]
+    TF["🏗️ Terraform\nVPC · EKS · S3"]
+
+    Dev -->|push| CI
+    CI -->|bump image tag| Repo
+    Repo -->|watches every 3 min| Argo
+    TF -.->|provisions| Argo
+
+    subgraph K8s["☸️  Kubernetes Cluster"]
+        direction TB
+        Portal["🌐 Forge Console\nFastAPI · Three.js :8501"]
+        Docs["📚 docs-assistant\nRAG + TF-IDF :8000"]
+        Model["📊 model-serving\nDeploy Risk Model :8000"]
+        LLM["🤖 llm-gateway\nCache · Cost · Tokens :8000"]
+        AIOps["🚨 aiops-agent\nIncidents · Remediation :8000"]
+        Prom["📈 Prometheus :9090"]
+        Grafana["📉 Grafana\nMission Control :3000"]
+    end
+
+    Argo -->|sync| K8s
+    Portal -->|/ask| Docs
+    Portal -->|/predict| Model
+    Portal -->|/v1/chat| LLM
+    Portal -->|/incidents| AIOps
+    Docs -->|all LLM calls| LLM
+    AIOps -->|summarize| LLM
+    AIOps -->|query metrics| Prom
+    Docs & Model & LLM & AIOps -->|/metrics| Prom
+    Prom -->|datasource| Grafana
+    Portal -->|embed| Grafana
+
+    style Portal fill:#4CAF50,color:#fff
+    style Docs fill:#2196F3,color:#fff
+    style Model fill:#9C27B0,color:#fff
+    style LLM fill:#FF9800,color:#fff
+    style AIOps fill:#F44336,color:#fff
+    style Prom fill:#E91E63,color:#fff
+    style Grafana fill:#FF5722,color:#fff
+    style TF fill:#607D8B,color:#fff
+```
+
+### 3D Platform Architecture
+
+The console renders this topology interactively with Three.js. Drag the scene to orbit it and select a service node for a short description.
+
+![Three-dimensional AI IDP service topology showing the portal, docs assistant, LLM gateway, model serving, AIOps agent, Prometheus, and Grafana](docs/forge-architecture-3d.png)
+
+---
+
+## Services
+
+| Service | What it does | Port | Key Tech |
+|---|---|---|---|
+| `portal` | Forge operations console: environment health, workloads/logs, risk scoring, AI chat, cost planning, and reports | 8501 | FastAPI, Vite, Three.js |
+| `docs-assistant` | RAG over runbooks, answers via LLM gateway | 8000 | FastAPI, TF-IDF, sklearn |
+| `model-serving` | Deploy-risk prediction (synthetic training data) | 8000 | FastAPI, scikit-learn |
+| `llm-gateway` | Single door to LLM: cache, token count, cost | 8000 | FastAPI, httpx |
+| `aiops-agent` | Watches Prometheus, opens incidents, restarts deployments (opt-in) | 8000 | FastAPI, asyncio |
+| `prometheus` | Scrapes `/metrics` from all 4 services | 9090 | Prometheus |
+| `grafana` | Mission Control dashboard | 3000 | Grafana |
+
+---
+
+## Quick Start — Run Locally (5 minutes)
+
+> **Pre-requisites:** Docker Desktop running, `docker compose` v2, ~4 GB RAM free.
+
+```bash
+# 1. Clone
+git clone https://github.com/your-org/ai-idp.git
+cd ai-idp
+
+# 2. Start everything (builds all images, starts 7 containers)
+docker compose up --build
+
+# 3. Open the UI
+#   Portal       →  http://localhost:8501
+#   Grafana      →  http://localhost:3000  (anonymous admin, no password)
+#   Prometheus   →  http://localhost:9090
+```
+
+> LLM is **mocked by default** — no API key needed. For real Anthropic responses:
+> ```bash
+> LLM_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-ant-... docker compose up --build
+> ```
+
+### What to try in the Forge Console (http://localhost:8501)
+
+| Section | What to do |
+|---|---|
+| **Environment health** | Switch among configured profiles and inspect live `/healthz` checks and incident activity. Unconfigured environments are marked clearly. |
+| **Knowledge search** | Search runbooks and service docs through the TF-IDF RAG service and inspect returned source names/relevance. |
+| **Deploy risk** | Submit release inputs to the model-serving API. The model is trained on synthetic data; treat the score as a demo only. |
+| **Workloads & logs** | Unlock token-gated, read-only container inventory/logs. Local Docker access is optional; Kubernetes access uses namespaced pod/log RBAC. |
+| **AI copilot** | Chat through the LLM gateway. Mock mode works without an API key; Anthropic requires a configured key. |
+| **Cost planner** | Change AWS resource and container assumptions to recalculate an illustrative monthly estimate and optimization checks. |
+| **Reports** | Generate a point-in-time JSON snapshot or use the browser print dialog to save a PDF. |
+
+The default Compose setup configures **Development only**. Staging and Production remain visibly disconnected until their API URLs are supplied with `IDP_ENVIRONMENTS`; the console never invents health data for them.
+
+Configure all three profiles by setting the portal's `IDP_ENVIRONMENTS` variable to service base URLs reachable from the portal container. Example PowerShell value:
+
+```powershell
+$env:IDP_ENVIRONMENTS = @'
+{"dev":{"services":{"docs":"http://docs-assistant:8000","model":"http://model-serving:8000","gateway":"http://llm-gateway:8000","aiops":"http://aiops-agent:8000"}},"staging":{"services":{"docs":"https://docs.staging.example.com","model":"https://model.staging.example.com","gateway":"https://gateway.staging.example.com","aiops":"https://aiops.staging.example.com"}},"production":{"services":{"docs":"https://docs.example.com","model":"https://model.example.com","gateway":"https://gateway.example.com","aiops":"https://aiops.example.com"}}}
+'@
+docker compose up --build
+```
+
+Replace the example URLs with real authenticated/reachable service endpoints. For Kubernetes pod inventory/logs, add a `namespaces` map to each profile and deploy the portal into the cluster whose API it should query. The checked-in Kubernetes manifest configures only `dev`; for separate staging and production clusters, deploy a portal per cluster rather than handing one console broad cross-cluster credentials.
+
+To enable local container inventory and logs, start the optional read-only Docker socket proxy. In PowerShell:
+
+```powershell
+$env:COMPOSE_PROJECT_NAME = "ai-idp"
+$env:DOCKER_API_URL = "http://docker-socket-proxy:2375"
+$env:OPS_API_TOKEN = [guid]::NewGuid().ToString("N")
+docker compose --profile ops up --build
+```
+
+Enter the generated token in **Workloads & logs**. The proxy is not exposed on a host port and disallows write requests, but Docker logs can contain secrets; use this profile only on a trusted local machine. Kubernetes pod logs use a namespaced read-only ServiceAccount and the same token gate.
+
+For local development without containers, install the portal dependencies and build the static console before running Uvicorn:
+
+```powershell
+python -m pip install -r services/portal/requirements.txt
+Push-Location services/portal/web
+npm ci
+npm run build
+Pop-Location
+Push-Location services/portal
+python -m uvicorn app:app --host 127.0.0.1 --port 8501
+```
+
+The console is available at `http://localhost:8501`. For live backend calls, set `DOCS_URL`, `MODEL_URL`, `GATEWAY_URL`, and `AIOPS_URL` to reachable service endpoints before starting the portal. The cost planner uses illustrative rates, not AWS account billing or a live pricing feed.
+
+### Stop
+
+```bash
+docker compose down -v       # stops and removes containers + volumes
+```
+
+---
+
+## Project Structure
+
+```
+ai-idp/
+├── .github/
+│   └── workflows/ci.yaml          # frontend build → test → image build/scan → GitOps tag update
+├── deploy/
+│   └── local/
+│       ├── prometheus.yml         # scrape all 4 services
+│       ├── grafana-datasource.yml
+│       └── grafana-dashboards.yml
+├── gitops/
+│   ├── bootstrap/root.yaml        # ArgoCD App-of-Apps
+│   ├── apps/                      # one ArgoCD Application per service
+│   └── manifests/                 # Kubernetes Deployment + Service + Kustomize
+│       ├── docs-assistant/
+│       ├── model-serving/
+│       ├── llm-gateway/
+│       ├── aiops-agent/
+│       ├── portal/                 # console, ServiceAccount, scoped pod/log RBAC
+│       └── mission-control/       # Grafana dashboard ConfigMap
+├── services/
+│   ├── common/observability.py    # shared Prometheus middleware
+│   ├── docs-assistant/
+│   ├── model-serving/
+│   ├── llm-gateway/
+│   ├── aiops-agent/
+│   └── portal/                    # FastAPI API + Vite/Three.js console
+│       └── web/                   # browser UI source and npm lockfile
+├── terraform/
+│   ├── envs/dev/main.tf
+│   └── modules/{cluster,network,storage}/
+├── tests/
+│   ├── conftest.py
+│   ├── test_services.py
+│   └── test_portal.py
+├── docker-compose.yml
+├── Makefile
+└── requirements-dev.txt
+```
+
+---
+
+## Production Deployment — Step by Step
+
+### Prerequisites
+
+| Tool | Version | Install |
+|---|---|---|
+| `aws` CLI | latest | [aws.amazon.com/cli](https://aws.amazon.com/cli/) |
+| `terraform` | ≥ 1.6 | [developer.hashicorp.com/terraform](https://developer.hashicorp.com/terraform/install) |
+| `kubectl` | ≥ 1.29 | [kubernetes.io/docs](https://kubernetes.io/docs/tasks/tools/) |
+| `helm` | ≥ 3.14 | [helm.sh](https://helm.sh/docs/intro/install/) |
+| `argocd` CLI | ≥ 2.11 | [argo-cd.readthedocs.io](https://argo-cd.readthedocs.io/en/stable/cli_installation/) |
+| Docker / `docker buildx` | latest | [docs.docker.com](https://docs.docker.com/engine/install/) |
+| `gh` CLI (optional) | latest | [cli.github.com](https://cli.github.com/) |
+
+---
+
+### Step 1 — Fork & Configure the Repo
+
+```bash
+# Fork on GitHub, then clone your fork
+git clone https://github.com/<YOUR_ORG>/ai-idp.git
+cd ai-idp
+
+# Replace placeholder org/repo references (one-liner)
+find gitops/ -name "*.yaml" | xargs sed -i 's|your-org/ai-idp|<YOUR_ORG>/ai-idp|g'
+find gitops/ -name "*.yaml" | xargs sed -i 's|ghcr.io/your-org|ghcr.io/<YOUR_ORG>|g'
+```
+
+---
+
+### Step 2 — Provision Cloud Infrastructure with Terraform
+
+```bash
+# Authenticate with an AWS identity that can create VPC, EKS, IAM, and S3 resources
+aws configure
+aws sts get-caller-identity
+
+cd terraform/envs/dev
+terraform init
+terraform plan -out=tfplan -var="artifact_bucket=<globally-unique-bucket-name>"
+terraform apply tfplan
+```
+
+This creates:
+- **AWS EKS cluster** (`idp-dev`) in `ap-south-1`, with a managed node group
+- **VPC and private subnets** used by the EKS cluster
+- **S3 bucket** named by `artifact_bucket` for platform artifacts
+
+> **Cost warning:** EKS control-plane, EC2 worker, NAT, load-balancer, and storage charges apply. Review the plan and AWS pricing before applying. The current Terraform backend is local; configure a protected remote S3 backend and state locking before a shared deployment.
+
+```bash
+# Configure kubectl to talk to the new cluster
+aws eks update-kubeconfig --name idp-dev --region ap-south-1
+kubectl get nodes   # should show ready nodes
+```
+
+---
+
+### Step 3 — Build & Push Docker Images
+
+```bash
+# Login to GitHub Container Registry
+echo $GITHUB_TOKEN | docker login ghcr.io -u <YOUR_GITHUB_USER> --password-stdin
+
+# Build and push all 5 images (replace TAG with git sha or semver)
+export TAG=$(git rev-parse --short HEAD)
+
+for svc in docs-assistant model-serving llm-gateway aiops-agent portal; do
+  docker buildx build \
+    --platform linux/amd64 \
+    --file services/$svc/Dockerfile \
+    --tag ghcr.io/<YOUR_ORG>/idp-$svc:$TAG \
+    --push \
+    .
+done
+```
+
+---
+
+### Step 4 — Update Kubernetes Manifests with New Image Tag
+
+```bash
+# Update kustomization.yaml image tags in gitops/manifests/
+for svc in docs-assistant model-serving llm-gateway aiops-agent portal; do
+  sed -i "s|newTag: .*|newTag: $TAG|" gitops/manifests/$svc/kustomization.yaml
+done
+
+git add gitops/
+git commit -m "chore: deploy $TAG"
+git push
+```
+
+---
+
+### Step 5 — Install ArgoCD
+
+```bash
+kubectl create namespace argocd
+kubectl apply -n argocd \
+  -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+# Wait for ArgoCD server
+kubectl -n argocd rollout status deploy/argocd-server --timeout=300s
+
+# Get the initial admin password
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath="{.data.password}" | base64 -d; echo
+```
+
+---
+
+### Step 6 — Bootstrap the App-of-Apps
+
+```bash
+# Apply the root application — ArgoCD will pick up all services from gitops/apps/
+kubectl apply -f gitops/bootstrap/root.yaml
+
+# Port-forward ArgoCD UI (open http://localhost:8080, login admin / password from step 5)
+kubectl -n argocd port-forward svc/argocd-server 8080:443
+```
+
+ArgoCD will now automatically sync all services whenever you push to `main`.
+
+---
+
+### Step 7 — Create Namespaces & Secrets
+
+```bash
+# Create one namespace per service
+for ns in docs-assistant model-serving llm-gateway aiops-agent portal monitoring; do
+  kubectl create namespace $ns --dry-run=client -o yaml | kubectl apply -f -
+done
+
+# LLM API key (required for real LLM responses, skip for mock mode)
+kubectl -n llm-gateway create secret generic llm-gateway-secrets \
+  --from-literal=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# Optional: unlock read-only workload inventory and pod logs in the console
+export OPS_API_TOKEN="$(openssl rand -hex 32)"
+kubectl -n portal create secret generic platform-ops-access \
+  --from-literal=token="$OPS_API_TOKEN" --dry-run=client -o yaml | kubectl apply -f -
+```
+
+The ops token is a shared access gate, not user authentication. Put the console behind SSO and TLS before exposing it outside a trusted network.
+
+---
+
+### Step 8 — Install Prometheus + Grafana (kube-prometheus-stack)
+
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+  --namespace monitoring --create-namespace \
+  --set grafana.adminPassword="$GRAFANA_ADMIN_PASSWORD" \
+  --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
+  --wait
+```
+
+Then apply the Mission Control dashboard ConfigMap:
+```bash
+kubectl apply -f gitops/manifests/mission-control/configmap.yaml
+```
+
+---
+
+### Step 9 — Verify All Services Are Running
+
+```bash
+# Check ArgoCD sync status
+argocd app list
+
+# Check pod health per namespace
+for ns in docs-assistant model-serving llm-gateway aiops-agent portal; do
+  echo "=== $ns ==="
+  kubectl -n $ns get pods
+done
+
+# Smoke test each service health endpoint
+for ns in docs-assistant model-serving llm-gateway aiops-agent; do
+  POD=$(kubectl -n $ns get pods -o jsonpath='{.items[0].metadata.name}')
+  kubectl -n $ns exec $POD -- curl -sf http://localhost:8000/healthz
+done
+```
+
+---
+
+### Step 10 — Access the Platform
+
+```bash
+# Option A: Port-forward the portal
+kubectl -n portal port-forward svc/portal 8501:8501
+# Open http://localhost:8501
+
+# Option B: If ingress-nginx is installed, add to /etc/hosts:
+#   <INGRESS_IP>  ai-idp.local
+# Then open http://ai-idp.local
+
+# Grafana
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
+# Open http://localhost:3000  (admin / admin)
+```
+
+---
+
+### Step 11 — Set Up CI/CD (GitHub Actions)
+
+Add these secrets to your GitHub repo (`Settings → Secrets and variables → Actions`):
+
+| Secret | Value |
+|---|---|
+| `ANTHROPIC_API_KEY` | Optional provider key if you intentionally configure real Anthropic calls |
+
+The checked-in CI pipeline uses the automatic `GITHUB_TOKEN` package permission. It builds the Vite console and runs pytest on pull requests and pushes, then on `main` builds five images, runs a report-only Trivy scan, updates Kustomize tags, and pushes the manifest commit. It does not currently run Terraform or deploy to AWS.
+
+---
+
+### Step 12 — Tear Down (When Done)
+
+```bash
+# Remove ArgoCD apps (triggers deletion of all k8s resources)
+kubectl delete -f gitops/bootstrap/root.yaml
+
+# Destroy cloud infra
+cd terraform/envs/dev
+terraform destroy -var="artifact_bucket=<globally-unique-bucket-name>"
+```
+
+---
+
+## Makefile Reference
+
+```bash
+make up           # docker compose up --build (local)
+make down         # docker compose down -v
+make test         # pip install dev deps + pytest
+make kind-up      # local k8s cluster + ArgoCD bootstrap (requires kind)
+make tf-plan      # terraform init + plan in envs/dev
+```
+
+---
+
+## Observability
+
+All four services expose `GET /metrics` in Prometheus text format via the shared `common/observability.py` middleware.
+
+### Key Metrics
+
+| Metric | Service | What it tracks |
+|---|---|---|
+| `http_requests_total` | all | Request count by service, method, path, status |
+| `http_request_duration_seconds` | all | Latency histogram |
+| `llm_requests_total` | llm-gateway | LLM calls by provider, cache hit/miss, caller |
+| `llm_cost_usd_total` | llm-gateway | Estimated USD spend by caller |
+| `llm_tokens_total` | llm-gateway | Input + output tokens |
+| `llm_provider_latency_seconds` | llm-gateway | Provider call latency |
+| `predictions_total` | model-serving | Predictions by risk level (low/medium/high) |
+| `docs_answers_total` | docs-assistant | Answers by source (llm/fallback/no_match) |
+| `aiops_incidents_total` | aiops-agent | Incidents by rule + action |
+
+### Grafana Mission Control
+
+Open [http://localhost:3000](http://localhost:3000) → **IDP Mission Control** dashboard.
+
+Panels include: request rate per service, P95 latency, LLM token usage, LLM cost/hour, prediction count by risk level, active incidents.
+
+---
+
+## Known Limits (Read Before an Interview)
+
+- **Model trained on synthetic data.** Proves the serving path, not prediction quality. Say this first.
+- **Retrieval is TF-IDF**, not embeddings. It sometimes ranks the wrong chunk first. Next step: embeddings + vector store + eval set.
+- **LLM prices are placeholders.** Set `PRICE_IN_PER_MTOK` / `PRICE_OUT_PER_MTOK` env vars to real values.
+- **Gateway cache is in-memory, per pod.** Use Redis for multi-replica deployments.
+- **Remediation is off by default.** `ENABLE_REMEDIATION=true` enables restarts. Rollback (not restart) is the real fix and is not automated here.
+- **No user identity/SSO or network policies.** The shared ops token only gates read-only workload routes; it is not a login system. Put the console behind SSO/TLS and use managed secrets before exposing it.
+- **Only Development is configured by default.** Supply real service URLs and namespace mappings before enabling Staging or Production in the selector.
+- **Cost planner is illustrative.** It does not read AWS billing or live regional pricing; validate estimates against Cost Explorer and the AWS Pricing API.
+
+---
+
+## Resume Bullet
+
+> Architected and shipped an AI-powered Internal Developer Platform unifying RAG search, MLOps model serving, fine-tuned LLM inference, and an autonomous AIOps remediation agent — deployed via GitOps (ArgoCD) on Kubernetes with unified cost and latency observability.
+
+---
+
+## License
+
+MIT

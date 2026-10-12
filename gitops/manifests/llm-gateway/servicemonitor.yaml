@@ -1,0 +1,8 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: llm-gateway
+spec:
+  selector:
+    matchLabels: {app: llm-gateway}
+  endpoints: [{port: http, path: /metrics, interval: 15s}]

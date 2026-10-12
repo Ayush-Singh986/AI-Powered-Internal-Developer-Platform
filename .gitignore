@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.venv/
+.terraform/
+*.tfstate*
+*.joblib
+.env
+services/portal/web/node_modules/
+services/portal/web/dist/

@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI-IDP Architecture</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117;
+      color: #e0e0e0;
+      min-height: 100vh;
+    }
+    header {
+      background: linear-gradient(135deg, #1a1f2e 0%, #16213e 100%);
+      border-bottom: 1px solid #2d3748;
+      padding: 24px 40px;
+    }
+    header h1 { font-size: 1.8rem; font-weight: 700; color: #63b3ed; }
+    header p { color: #a0aec0; margin-top: 6px; font-size: 0.95rem; }
+
+    .layout { display: flex; height: calc(100vh - 100px); }
+
+    /* Diagram panel */
+    .diagram-panel {
+      flex: 1;
+      padding: 32px;
+      overflow: auto;
+      position: relative;
+    }
+    .mermaid { max-width: 100%; }
+
+    /* Info panel */
+    .info-panel {
+      width: 340px;
+      background: #1a1f2e;
+      border-left: 1px solid #2d3748;
+      padding: 24px;
+      overflow-y: auto;
+    }
+    .info-panel h2 { font-size: 1rem; color: #63b3ed; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+    .info-card {
+      background: #252d3d;
+      border: 1px solid #2d3748;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: border-color 0.2s, transform 0.1s;
+    }
+    .info-card:hover { border-color: #63b3ed; transform: translateX(4px); }
+    .info-card.active { border-color: #48bb78; background: #1e3a2e; }
+    .info-card h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 6px; }
+    .info-card .badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border-radius: 12px;
+      margin-right: 4px;
+      margin-bottom: 6px;
+    }
+    .badge-blue { background: #2b4c7e; color: #90cdf4; }
+    .badge-green { background: #1e3a2e; color: #68d391; }
+    .badge-orange { background: #3d2b0a; color: #fbd38d; }
+    .badge-red { background: #3d1a1a; color: #fc8181; }
+    .badge-purple { background: #2d1f4e; color: #d6bcfa; }
+    .info-card p { font-size: 0.82rem; color: #a0aec0; line-height: 1.5; margin-top: 6px; }
+    .info-card .port { font-family: monospace; font-size: 0.8rem; color: #68d391; }
+    .info-card .endpoint {
+      font-family: monospace;
+      font-size: 0.75rem;
+      background: #0f1117;
+      padding: 8px;
+      border-radius: 4px;
+      margin-top: 8px;
+      color: #f6ad55;
+    }
+    .url-links { margin-top: 8px; }
+    .url-links a {
+      display: block;
+      font-size: 0.78rem;
+      color: #63b3ed;
+      text-decoration: none;
+      padding: 3px 0;
+    }
+    .url-links a:hover { text-decoration: underline; }
+
+    /* Legend */
+    .legend {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      padding: 12px 32px;
+      background: #1a1f2e;
+      border-top: 1px solid #2d3748;
+      font-size: 0.78rem;
+      color: #a0aec0;
+    }
+    .legend span { display: flex; align-items: center; gap: 6px; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+    /* Flow arrows */
+    .flow-desc {
+      background: #252d3d;
+      border: 1px solid #2d3748;
+      border-radius: 6px;
+      padding: 12px;
+      margin-top: 12px;
+      font-size: 0.8rem;
+      color: #a0aec0;
+      line-height: 1.6;
+    }
+    .flow-desc strong { color: #e2e8f0; }
+
+    /* Tooltip */
+    #tooltip {
+      position: fixed;
+      background: #1a1f2e;
+      border: 1px solid #63b3ed;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 0.8rem;
+      color: #e2e8f0;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 9999;
+      max-width: 260px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🏗️ AI-Powered Internal Developer Platform</h1>
+  <p>Interactive architecture — click any service card on the right to highlight it in the diagram</p>
+</header>
+
+<div class="layout">
+  <!-- Left: Mermaid diagram -->
+  <div class="diagram-panel">
+    <div class="mermaid" id="diagram">
+flowchart TD
+    Dev["👨‍💻 Developer\ngit push"]:::ext
+    CI["⚙️ GitHub Actions\nconsole build · test · image scan · push"]:::ci
+    Repo["📁 GitOps Repo\ngitops/apps/ + manifests/"]:::gitops
+    Argo["🔄 ArgoCD\nApp-of-Apps"]:::gitops
+    TF["🏗️ Terraform\nAWS VPC · EKS · S3"]:::infra
+
+    Dev -->|"git push"| CI
+    CI -->|"bump image tag"| Repo
+    Repo -->|"watches every 3 min"| Argo
+    TF -.->|"provisions cluster"| Argo
+
+    subgraph K8s["☸️  Kubernetes Cluster"]
+        direction TB
+
+        subgraph Frontends["User-facing"]
+            Portal["🌐 Forge Console\nFastAPI · Three.js :8501"]:::portal
+        end
+
+        subgraph AIServices["AI Services"]
+            Docs["📚 docs-assistant\nRAG · TF-IDF :8000"]:::docs
+            Model["📊 model-serving\nDeploy Risk :8000"]:::model
+            LLM["🤖 llm-gateway\nCache · Cost :8000"]:::llm
+            AIOps["🚨 aiops-agent\nIncidents :8000"]:::aiops
+        end
+
+        subgraph Observability["Observability Stack"]
+            Prom["📈 Prometheus\n:9090"]:::obs
+            Grafana["📉 Grafana\nMission Control :3000"]:::obs
+        end
+    end
+
+    Argo -->|"sync"| K8s
+    Portal -->|"/ask"| Docs
+    Portal -->|"/predict"| Model
+    Portal -->|"/v1/chat"| LLM
+    Portal -->|"/incidents"| AIOps
+    Portal -.->|"embed iframe"| Grafana
+    Docs -->|"LLM calls"| LLM
+    AIOps -->|"summarize"| LLM
+    AIOps -->|"query PromQL"| Prom
+    Docs & Model & LLM & AIOps -->|"/metrics"| Prom
+    Prom -->|"datasource"| Grafana
+
+    classDef ext fill:#4a5568,stroke:#718096,color:#e2e8f0
+    classDef ci fill:#744210,stroke:#d69e2e,color:#fefce8
+    classDef gitops fill:#1a365d,stroke:#3182ce,color:#ebf8ff
+    classDef infra fill:#44337a,stroke:#805ad5,color:#faf5ff
+    classDef portal fill:#4b2418,stroke:#ff7842,color:#fff4ec
+    classDef docs fill:#1a365d,stroke:#4299e1,color:#ebf8ff
+    classDef model fill:#44337a,stroke:#9f7aea,color:#faf5ff
+    classDef llm fill:#3d2a00,stroke:#f6ad55,color:#fffbeb
+    classDef aiops fill:#3d1a1a,stroke:#f56565,color:#fff5f5
+    classDef obs fill:#1a3a3a,stroke:#38b2ac,color:#e6fffa
+    </div>
+  </div>
+
+  <!-- Right: Info panel -->
+  <div class="info-panel">
+    <h2>Services</h2>
+
+    <div class="info-card" onclick="highlight('Portal')">
+      <h3>🌐 Forge Console</h3>
+      <span class="badge badge-orange">FastAPI</span>
+      <span class="badge badge-orange">Three.js</span>
+      <p class="port">localhost:8501</p>
+      <p>Operations console for environment health, deployment risk, token-gated read-only workload logs, AI chat, cloud cost planning, and reports.</p>
+      <div class="url-links">
+        <a href="http://localhost:8501" target="_blank">→ Open Portal (local)</a>
+      </div>
+    </div>
+
+    <div class="info-card" onclick="highlight('Docs')">
+      <h3>📚 docs-assistant</h3>
+      <span class="badge badge-blue">FastAPI</span>
+      <span class="badge badge-blue">TF-IDF RAG</span>
+      <p class="port">localhost:8001</p>
+      <p>Retrieves relevant chunks from runbook markdown files using TF-IDF, then calls llm-gateway to synthesize an answer.</p>
+      <div class="endpoint">POST /ask  {"question": "..."}</div>
+      <div class="url-links">
+        <a href="http://localhost:8001/docs" target="_blank">→ Swagger UI (local)</a>
+      </div>
+    </div>
+
+    <div class="info-card" onclick="highlight('Model')">
+      <h3>📊 model-serving</h3>
+      <span class="badge badge-purple">FastAPI</span>
+      <span class="badge badge-purple">scikit-learn</span>
+      <p class="port">localhost:8002</p>
+      <p>Deploy-risk logistic regression. Scores a proposed deployment by files changed, lines changed, test coverage, time of day, recent failures.</p>
+      <div class="endpoint">POST /predict  {"files_changed": 12, ...}</div>
+      <div class="url-links">
+        <a href="http://localhost:8002/docs" target="_blank">→ Swagger UI (local)</a>
+      </div>
+    </div>
+
+    <div class="info-card" onclick="highlight('LLM')">
+      <h3>🤖 llm-gateway</h3>
+      <span class="badge badge-orange">FastAPI</span>
+      <span class="badge badge-orange">httpx</span>
+      <span class="badge badge-orange">cache</span>
+      <p class="port">localhost:8003</p>
+      <p>Single door to LLM providers. In-memory LRU cache (500 entries), token + cost tracking, mock mode when no API key set.</p>
+      <div class="endpoint">POST /v1/chat  {"prompt": "...", "caller": "portal"}</div>
+      <div class="url-links">
+        <a href="http://localhost:8003/docs" target="_blank">→ Swagger UI (local)</a>
+      </div>
+    </div>
+
+    <div class="info-card" onclick="highlight('AIOps')">
+      <h3>🚨 aiops-agent</h3>
+      <span class="badge badge-red">FastAPI</span>
+      <span class="badge badge-red">asyncio</span>
+      <p class="port">localhost:8004</p>
+      <p>Polls Prometheus every 30s. Opens incidents on high error rate or latency. Optionally restarts deployments (ENABLE_REMEDIATION=true).</p>
+      <div class="endpoint">POST /simulate  {"service": "docs-assistant"}</div>
+      <div class="url-links">
+        <a href="http://localhost:8004/docs" target="_blank">→ Swagger UI (local)</a>
+        <a href="http://localhost:8004/incidents" target="_blank">→ GET /incidents (JSON)</a>
+      </div>
+    </div>
+
+    <div class="info-card" onclick="highlight('Prom')">
+      <h3>📈 Prometheus</h3>
+      <span class="badge badge-blue">Metrics</span>
+      <p class="port">localhost:9090</p>
+      <p>Scrapes /metrics from all 4 services every 5s. Powers the Grafana dashboard and AIOps agent queries.</p>
+      <div class="url-links">
+        <a href="http://localhost:9090" target="_blank">→ Prometheus UI (local)</a>
+        <a href="http://localhost:9090/targets" target="_blank">→ Targets</a>
+      </div>
+    </div>
+
+    <div class="info-card" onclick="highlight('Grafana')">
+      <h3>📉 Grafana Mission Control</h3>
+      <span class="badge badge-orange">Dashboards</span>
+      <p class="port">localhost:3000</p>
+      <p>Auto-provisioned "IDP Mission Control" dashboard. Request rate, P95 latency, LLM cost, token usage, risk predictions, active incidents.</p>
+      <div class="url-links">
+        <a href="http://localhost:3000" target="_blank">→ Open Grafana (local)</a>
+        <a href="http://localhost:3000/d/idp-mission-control" target="_blank">→ Mission Control Dashboard</a>
+      </div>
+    </div>
+
+    <h2 style="margin-top:20px;">Request Flow</h2>
+    <div class="flow-desc">
+      <strong>Docs query:</strong> Portal → docs-assistant /ask → TF-IDF top-3 chunks → llm-gateway /v1/chat → Anthropic (or mock) → answer + sources back to Portal<br><br>
+      <strong>Deploy risk:</strong> Portal → model-serving /predict → LogisticRegression → risk_level (low/medium/high)<br><br>
+      <strong>Auto-remediation:</strong> aiops-agent polls Prometheus PromQL → breach detected → incident created → llm-gateway for summary → (if enabled) kubectl rollout restart
+    </div>
+  </div>
+</div>
+
+<div class="legend">
+  <span><div class="legend-dot" style="background:#38a169"></div> Portal / UI</span>
+  <span><div class="legend-dot" style="background:#4299e1"></div> AI Services</span>
+  <span><div class="legend-dot" style="background:#d69e2e"></div> CI/CD</span>
+  <span><div class="legend-dot" style="background:#3182ce"></div> GitOps</span>
+  <span><div class="legend-dot" style="background:#805ad5"></div> Infra / Terraform</span>
+  <span><div class="legend-dot" style="background:#38b2ac"></div> Observability</span>
+  <span style="margin-left:auto; color:#718096">← Click any service card to highlight</span>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      primaryColor: '#1a365d',
+      primaryTextColor: '#e2e8f0',
+      primaryBorderColor: '#3182ce',
+      lineColor: '#4a5568',
+      secondaryColor: '#2d3748',
+      tertiaryColor: '#1a1f2e',
+      background: '#0f1117',
+      mainBkg: '#1a1f2e',
+      nodeBorder: '#4a5568',
+      clusterBkg: '#1a1f2e',
+      titleColor: '#63b3ed',
+      edgeLabelBackground: '#252d3d',
+    },
+    flowchart: {
+      curve: 'basis',
+      htmlLabels: true,
+      padding: 20,
+    },
+  });
+
+  let lastActive = null;
+
+  function highlight(nodeId) {
+    // Remove previous highlight
+    document.querySelectorAll('.info-card').forEach(c => c.classList.remove('active'));
+
+    // Find clicked card
+    const cards = document.querySelectorAll('.info-card');
+    cards.forEach(card => {
+      if (card.querySelector('h3') && card.getAttribute('onclick').includes(nodeId)) {
+        card.classList.add('active');
+        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+
+    // Highlight node in SVG
+    setTimeout(() => {
+      const svg = document.querySelector('.mermaid svg');
+      if (!svg) return;
+
+      // Reset all nodes
+      svg.querySelectorAll('.node').forEach(n => {
+        n.style.opacity = '0.4';
+        n.style.filter = '';
+      });
+
+      // Find and highlight matching node
+      svg.querySelectorAll('.node').forEach(n => {
+        const text = n.textContent || '';
+        if (text.includes(nodeId.replace(/([A-Z])/g, ' $1').trim()) ||
+            n.id.includes(nodeId)) {
+          n.style.opacity = '1';
+          n.style.filter = 'drop-shadow(0 0 8px #63b3ed)';
+        }
+      });
+
+      lastActive = nodeId;
+    }, 100);
+  }
+
+  // Reset highlight on background click
+  document.querySelector('.diagram-panel').addEventListener('click', (e) => {
+    if (e.target.closest('.mermaid') && !e.target.closest('.node')) {
+      document.querySelectorAll('.info-card').forEach(c => c.classList.remove('active'));
+      const svg = document.querySelector('.mermaid svg');
+      if (svg) svg.querySelectorAll('.node').forEach(n => {
+        n.style.opacity = '1';
+        n.style.filter = '';
+      });
+    }
+  });
+
+  // Add tooltips to mermaid nodes after render
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+      const tooltip = document.getElementById('tooltip');
+      const tips = {
+        'Portal': 'Forge console · FastAPI + Three.js · port 8501\nClick to open http://localhost:8501',
+        'Docs': 'RAG docs assistant · port 8001\nTF-IDF retrieval over markdown runbooks',
+        'Model': 'Deploy risk model · port 8002\nLogistic regression on synthetic data',
+        'LLM': 'LLM gateway · port 8003\nCache + cost tracking + mock mode',
+        'AIOps': 'AIOps agent · port 8004\nPrometheus watcher + incident feed',
+        'Prom': 'Prometheus · port 9090\nScrapes all services every 5s',
+        'Grafana': 'Grafana · port 3000\nMission Control dashboard',
+      };
+
+      document.querySelectorAll('.mermaid .node').forEach(node => {
+        node.style.cursor = 'pointer';
+        node.addEventListener('mouseenter', (e) => {
+          const text = node.textContent;
+          const key = Object.keys(tips).find(k => text.includes(k));
+          if (key) {
+            tooltip.textContent = tips[key];
+            tooltip.style.opacity = '1';
+          }
+        });
+        node.addEventListener('mousemove', (e) => {
+          tooltip.style.left = (e.clientX + 12) + 'px';
+          tooltip.style.top = (e.clientY - 10) + 'px';
+        });
+        node.addEventListener('mouseleave', () => {
+          tooltip.style.opacity = '0';
+        });
+      });
+    }, 1500);
+  });
+</script>
+</body>
+</html>

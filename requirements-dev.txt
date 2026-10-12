@@ -1,0 +1,5 @@
+-r services/llm-gateway/requirements.txt
+-r services/model-serving/requirements.txt
+-r services/docs-assistant/requirements.txt
+-r services/aiops-agent/requirements.txt
+pytest==8.3.3

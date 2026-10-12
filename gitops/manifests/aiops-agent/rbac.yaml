@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: aiops-agent}
+---
+# Least privilege: aiops-agent may only get/patch deployments in docs-assistant.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: aiops-restarter, namespace: docs-assistant}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: aiops-restarter, namespace: docs-assistant}
+subjects:
+  - {kind: ServiceAccount, name: aiops-agent, namespace: aiops-agent}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: aiops-restarter}
+---
+# Least privilege: aiops-agent may only get/patch deployments in model-serving.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: aiops-restarter, namespace: model-serving}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: aiops-restarter, namespace: model-serving}
+subjects:
+  - {kind: ServiceAccount, name: aiops-agent, namespace: aiops-agent}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: aiops-restarter}
+---
+# Least privilege: aiops-agent may only get/patch deployments in llm-gateway.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: aiops-restarter, namespace: llm-gateway}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: aiops-restarter, namespace: llm-gateway}
+subjects:
+  - {kind: ServiceAccount, name: aiops-agent, namespace: aiops-agent}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: aiops-restarter}

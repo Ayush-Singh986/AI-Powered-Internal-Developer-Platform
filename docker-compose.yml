@@ -1,0 +1,175 @@
+# Local run of the whole platform.
+# LLM is mocked by default — no API key needed.
+# For real Anthropic responses: LLM_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-ant-... docker compose up --build
+#
+# URLs after `docker compose up --build`:
+#   Portal (main UI)  →  http://localhost:8501
+#   Grafana dashboard →  http://localhost:3000   (no login required)
+#   Prometheus        →  http://localhost:9090
+#   docs-assistant    →  http://localhost:8001
+#   model-serving     →  http://localhost:8002
+#   llm-gateway       →  http://localhost:8003
+#   aiops-agent       →  http://localhost:8004
+
+services:
+
+  # ── LLM Gateway (no deps, start first) ────────────────────────────────────
+  llm-gateway:
+    build:
+      context: .
+      dockerfile: services/llm-gateway/Dockerfile
+    ports: ["8003:8000"]
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-claude-haiku-5-5}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # ── Model Serving ──────────────────────────────────────────────────────────
+  model-serving:
+    build:
+      context: .
+      dockerfile: services/model-serving/Dockerfile
+    ports: ["8002:8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # ── Docs Assistant ─────────────────────────────────────────────────────────
+  docs-assistant:
+    build:
+      context: .
+      dockerfile: services/docs-assistant/Dockerfile
+    ports: ["8001:8000"]
+    environment:
+      GATEWAY_URL: "http://llm-gateway:8000"
+    depends_on:
+      llm-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # ── Prometheus ─────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    ports: ["9090:9090"]
+    volumes:
+      - ./deploy/local/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── AIOps Agent ────────────────────────────────────────────────────────────
+  aiops-agent:
+    build:
+      context: .
+      dockerfile: services/aiops-agent/Dockerfile
+    ports: ["8004:8000"]
+    environment:
+      PROMETHEUS_URL: "http://prometheus:9090"
+      GATEWAY_URL: "http://llm-gateway:8000"
+      ENABLE_REMEDIATION: "false"   # no Kubernetes in local compose — dry run only
+      CHECK_INTERVAL_SECONDS: "30"
+      COOLDOWN_SECONDS: "60"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      llm-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # ── Grafana ────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.2.0
+    ports: ["3000:3000"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./deploy/local/grafana-datasource.yml:/etc/grafana/provisioning/datasources/ds.yml:ro
+      - ./deploy/local/grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/db.yml:ro
+      - ./gitops/manifests/mission-control/dashboard.json:/var/lib/grafana/dashboards/mission-control.json:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Portal (Streamlit UI — main entry point) ───────────────────────────────
+  portal:
+    build:
+      context: .
+      dockerfile: services/portal/Dockerfile
+    ports: ["8501:8501"]
+    environment:
+      DOCS_URL: "http://docs-assistant:8000"
+      MODEL_URL: "http://model-serving:8000"
+      GATEWAY_URL: "http://llm-gateway:8000"
+      AIOPS_URL: "http://aiops-agent:8000"
+      GRAFANA_URL: "http://localhost:3000"
+      IDP_ENVIRONMENTS: ${IDP_ENVIRONMENTS:-}
+      DOCKER_API_URL: ${DOCKER_API_URL:-}
+      OPS_API_TOKEN: ${OPS_API_TOKEN:-}
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-ai-idp}
+    depends_on:
+      docs-assistant:
+        condition: service_healthy
+      model-serving:
+        condition: service_healthy
+      llm-gateway:
+        condition: service_healthy
+      aiops-agent:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Optional read-only Docker inventory/logs for the local developer console.
+  # Do not expose this proxy outside the Compose network.
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    profiles: ["ops"]
+    environment:
+      CONTAINERS: "1"
+      POST: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  grafana-data:
