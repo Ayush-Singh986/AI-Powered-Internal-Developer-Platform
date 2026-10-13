@@ -122,6 +122,48 @@ The console renders this topology interactively with Three.js. Drag the scene to
 
 ![Three-dimensional AI IDP service topology showing the portal, docs assistant, LLM gateway, model serving, AIOps agent, Prometheus, and Grafana](docs/forge-architecture-3d.png)
 
+### How the Platform Works, From Start to Finish
+
+This project is an internal developer platform (IDP): a set of shared tools that gives engineers one place to understand services, check a release, search internal guidance, and inspect operational signals. The architecture has two connected paths: a **delivery path** that builds and deploys software, and a **runtime path** that serves developer requests and reports health.
+
+#### 1. A code change enters the delivery path
+
+A developer pushes a change to GitHub. GitHub Actions runs the project checks, builds the portal's browser assets, and builds and scans service images as configured by the workflow. This is the continuous integration (CI) part: it checks that a change is ready to package. CI is not the cluster controller and does not directly keep the live system reconciled.
+
+#### 2. Terraform provides the infrastructure
+
+Terraform describes the AWS foundation used by the production-style deployment: a VPC and networking, an EKS Kubernetes cluster, and an S3 bucket for artifacts. Applying Terraform creates or updates that infrastructure; it does not deploy each application service. For local experiments, Docker Compose runs the services without requiring this cloud infrastructure.
+
+#### 3. GitOps describes what Kubernetes should run
+
+Kubernetes manifests in `gitops/manifests/` describe Deployments, Services, configuration, and monitoring integration. Argo CD starts from the root App-of-Apps definition in `gitops/bootstrap/root.yaml`, discovers the applications in `gitops/apps/`, and watches their desired configuration. When Git changes, Argo CD synchronizes the cluster toward that declared state. This separation makes Git the reviewable record of the intended deployment and Kubernetes the place where workloads run.
+
+#### 4. The portal is the developer entry point
+
+An engineer opens the Forge console. Its FastAPI backend exposes the browser-facing API, while the Vite-built JavaScript interface renders the operations console and its Three.js topology. The portal calls the platform services over HTTP; it is not the model, documentation index, or LLM provider itself. The environment selector chooses which configured service endpoints the portal queries. Only Development is configured by default, so other environments remain visibly disconnected until real endpoints are supplied.
+
+#### 5. Requests are routed to the service that owns the work
+
+- **Documentation question:** The portal sends a question to `docs-assistant`. The service searches its Markdown runbooks with TF-IDF, selects relevant sections, and returns the answer with source information. When configured, it can send retrieved context to `llm-gateway` to synthesize the response; retrieval/fallback behavior is available when model synthesis is not used.
+- **Deployment risk check:** The portal sends release inputs, such as files changed, test coverage, and recent failures, to `model-serving`. The scikit-learn model returns a risk score and category. The current model uses synthetic training data, so this demonstrates the serving contract and is not a trustworthy production release gate.
+- **AI chat:** The portal sends chat prompts to `llm-gateway`, which is the shared boundary for model-provider calls. The gateway supports mock responses for local use and a configured provider for real inference; it also centralizes response caching and records token, latency, and estimated-cost data. The documentation assistant and AIOps agent can use this same gateway instead of implementing separate provider integrations.
+- **Incident activity:** The portal reads incident data from `aiops-agent`. The agent periodically queries Prometheus for configured signals and records incidents when its rules detect a problem. Remediation is opt-in; when enabled, the configured action can restart a workload, but restarting is not the same as safely rolling back a bad release.
+- **Workloads and logs:** The portal can show container inventory and recent logs only when the optional operations integration is configured and authorized. This is read-only access, gated by an operations token in the demo; Kubernetes deployments should retain narrowly scoped namespace permissions and use real user authentication before exposure.
+
+#### 6. Telemetry closes the operations loop
+
+The four application services expose Prometheus metrics such as request volume and latency, LLM usage and estimated spend, model predictions, and incident actions. Prometheus scrapes those endpoints and makes the time-series data queryable. Grafana reads Prometheus and presents the Mission Control dashboard. The portal can also link to or embed the dashboard, while its own health view calls service health endpoints and displays the latest check results. In this way, requests create operational signals, and those signals feed both human dashboards and the AIOps incident loop.
+
+#### 7. The console helps with planning and reporting
+
+The cost planner recalculates an illustrative infrastructure estimate from the selected resource assumptions; it is not connected to AWS billing or live pricing. A generated report captures a point-in-time environment and incident snapshot together with the planner inputs. These features help an engineer reason about a proposed setup, but they should not be mistaken for billing data or a compliance record.
+
+#### The complete lifecycle
+
+In short: **a developer changes code → CI checks and packages it → Terraform supplies the cluster foundation → Git records the Kubernetes desired state → Argo CD synchronizes that state → the portal routes user requests to focused services → Prometheus collects runtime metrics → Grafana and AIOps turn those metrics into visibility and incident signals.** A developer can then use the same portal to inspect health, ask questions, evaluate a proposed deployment, and review an operational snapshot.
+
+This is a learning and demonstration platform, not a ready-made production control plane. Before production use, replace synthetic model training data and illustrative pricing, configure real identity and secret management, review service/network permissions, and validate remediation and deployment rollback procedures.
+
 ---
 
 ## Services
