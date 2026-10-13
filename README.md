@@ -6,7 +6,7 @@
 [![Terraform](https://img.shields.io/badge/IaC-Terraform-purple.svg)](https://www.terraform.io/)
 [![Docker](https://img.shields.io/badge/container-Docker-blue.svg)](https://www.docker.com/)
 
-> A deployable AI-powered Internal Developer Platform prototype: documentation RAG, deployment-risk scoring, a shared LLM gateway, AIOps incident handling, and an operations console with environment health, workload logs, cost planning, and reports.
+> An AI-powered Internal Developer Platform prototype designed for deployment to AWS EKS: documentation RAG, deployment-risk scoring, a shared LLM gateway, AIOps incident handling, and an operations console with environment health, workload logs, cost planning, and reports. Docker Compose and kind are optional local development paths, not the target deployment.
 
 For a beginner-friendly explanation and interview Q&A, see [README_INTERVIEW.md](README_INTERVIEW.md).
 
@@ -15,56 +15,30 @@ For a beginner-friendly explanation and interview Q&A, see [README_INTERVIEW.md]
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                          AI Internal Developer Platform                          │
-│                                                                                  │
-│  Developer                                                                       │
-│     │  git push                                                                  │
-│     ▼                                                                            │
-│  ┌────────────────┐    ┌──────────────────────────────────────────────────────┐ │
-│  │    Jenkins     │───▶│                    GitOps Repo                       │ │
-│  │  CI Pipeline   │    │  gitops/apps/  ←  ArgoCD watches  →  gitops/manifests│ │
-│  │ test·build·scan│    └───────────────────────┬──────────────────────────────┘ │
-│  └────────────────┘                            │ ArgoCD syncs                   │
-│                                                ▼                                │
-│  ┌─────────────────────────────────────────────────────────────────────────┐    │
-│  │                    Kubernetes Cluster (AWS EKS / kind)                   │    │
-│  │                                                                         │    │
-│  │  ┌─────────────┐   ┌──────────────────────────────────────────────┐    │    │
-│  │  │   Portal    │──▶│              Four AI Services                │    │    │
-│  │  │ FastAPI +   │   │                                              │    │    │
-│  │  │ Three.js UI │   │                                              │    │    │
-│  │  │  :8501      │   │  ┌─────────────┐   ┌──────────────────────┐ │    │    │
-│  │  │             │   │  │docs-assistant│   │   model-serving      │ │    │    │
-│  │  │  ·Docs Tab  │──▶│  │  RAG + TF-IDF│   │  scikit-learn risk  │ │    │    │
-│  │  │  ·Risk Tab  │──▶│  │   :8000      │   │   prediction :8000  │ │    │    │
-│  │  │  ·LLM Tab   │──▶│  └──────┬───────┘   └──────────────────────┘ │    │    │
-│  │  │  ·Incidents │──▶│         │           ┌──────────────────────┐ │    │    │
-│  │  │  ·Grafana   │   │         │           │    llm-gateway       │ │    │    │
-│  │  └─────────────┘   │  ┌──────▼──────────▶│  cache·cost·tokens  │ │    │    │
-│  │                    │  │  All LLM calls   │   :8000             │ │    │    │
-│  │                    │  └─────────────────▶│                     │ │    │    │
-│  │                    │                     └──────────────────────┘ │    │    │
-│  │                    │  ┌──────────────────────────────────────────┐ │    │    │
-│  │                    │  │         aiops-agent                      │ │    │    │
-│  │                    │  │  watches Prometheus → opens incidents    │ │    │    │
-│  │                    │  │  → (opt-in) restarts bad deployments     │ │    │    │
-│  │                    │  │   :8000                                  │ │    │    │
-│  │                    │  └──────────────────────────────────────────┘ │    │    │
-│  │                    └──────────────────────────────────────────────┘    │    │
-│  │                                                                         │    │
-│  │  ┌─────────────────────────────────────────────────────────────────┐   │    │
-│  │  │            Observability Stack                                  │   │    │
-│  │  │   Prometheus :9090  ◀──── /metrics from all 4 services         │   │    │
-│  │  │   Grafana    :3000  ◀──── Prometheus datasource                │   │    │
-│  │  │   Mission Control Dashboard: latency · cost · risk · incidents │   │    │
-│  │  └─────────────────────────────────────────────────────────────────┘   │    │
-│  └─────────────────────────────────────────────────────────────────────────┘    │
-│                                                                                  │
-│  ┌───────────────────────────────────────────────────────────────────────────┐  │
-│  │  Terraform (AWS VPC + EKS + S3) ─ provisions the cluster above            │  │
-│  └───────────────────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────────────────────┘
+Developer pushes code
+       │
+       ▼
+┌─────────────────────────────┐       webhook       ┌────────────────────────────┐
+│ GitHub repository           │────────────────────▶│ Jenkins CI                  │
+│ source + GitOps manifests   │◀────────────────────│ test · build · scan         │
+│ gitops/apps + manifests     │ commit image tags   │ push images to GHCR          │
+└──────────────┬──────────────┘                     └─────────────┬──────────────┘
+               │ Argo CD watches                                  │ push images
+               ▼                                                  ▼
+         ┌────────────┐                                      ┌────────────┐
+         │  Argo CD   │                                      │    GHCR    │
+         └─────┬──────┘                                      └──────┬─────┘
+               │ sync manifests                                     │ pull images
+               └──────────────────────────┬─────────────────────────┘
+                                          ▼
+                 ┌────────────────────────────────────────────┐
+                 │ AWS EKS                                     │
+                 │ Portal · docs-assistant · model-serving     │
+                 │ llm-gateway · aiops-agent                   │
+                 │ Prometheus · Grafana Mission Control        │
+                 └────────────────────────────────────────────┘
+                                          ▲
+                 Terraform provisions AWS VPC, EKS, and S3
 ```
 
 ### Interactive Mermaid Diagram
@@ -72,17 +46,21 @@ For a beginner-friendly explanation and interview Q&A, see [README_INTERVIEW.md]
 ```mermaid
 flowchart TD
     Dev["👨‍💻 Developer\ngit push"]
-    CI["⚙️ Jenkins\ntest · build · scan · push image"]
-    Repo["📁 GitOps Repo\ngitops/apps/ & gitops/manifests/"]
+    CI["⚙️ Jenkins\ntest · build · scan · push images"]
+    Repo["📁 GitHub Repo\nsource + gitops/apps/ & gitops/manifests/"]
+    GHCR["📦 GHCR\ncontainer images"]
     Argo["🔄 ArgoCD\nApp-of-Apps pattern"]
-    TF["🏗️ Terraform\nVPC · EKS · S3"]
+    TF["🏗️ Terraform\nAWS VPC · EKS · S3"]
 
-    Dev -->|push| CI
-    CI -->|bump image tag| Repo
+    Dev -->|push code| Repo
+    Repo -->|webhook| CI
+    CI -->|build, scan, push| GHCR
+    CI -->|commit image tags| Repo
     Repo -->|watches every 3 min| Argo
-    TF -.->|provisions| Argo
+    GHCR -->|EKS nodes pull images| K8s
+    TF -.->|provisions| K8s
 
-    subgraph K8s["☸️  Kubernetes Cluster"]
+    subgraph K8s["☁️ AWS EKS Cluster"]
         direction TB
         Portal["🌐 Forge Console\nFastAPI · Three.js :8501"]
         Docs["📚 docs-assistant\nRAG + TF-IDF :8000"]
@@ -131,7 +109,7 @@ A developer pushes a change to GitHub. Jenkins runs the project checks and build
 
 #### 2. Terraform provides the infrastructure
 
-Terraform describes the AWS foundation used by the production-style deployment: a VPC and networking, an EKS Kubernetes cluster, and an S3 bucket for artifacts. Applying Terraform creates or updates that infrastructure; it does not deploy each application service. For local experiments, Docker Compose runs the services without requiring this cloud infrastructure.
+Terraform describes the AWS foundation for the target deployment: a VPC and networking, an EKS Kubernetes cluster, and an S3 bucket for artifacts. Applying Terraform creates or updates that infrastructure; it does not deploy each application service. Docker Compose and kind are optional local development tools, not the target hosting environment.
 
 #### 3. GitOps describes what Kubernetes should run
 
@@ -179,9 +157,9 @@ This is a learning and demonstration platform, not a ready-made production contr
 
 ---
 
-## Quick Start — Run Locally (5 minutes)
+## Optional Local Development — Run with Docker Compose (5 minutes)
 
-> **Pre-requisites:** Docker Desktop running, `docker compose` v2, ~4 GB RAM free.
+> This starts a local development copy only. The deployment target is AWS EKS. **Pre-requisites:** Docker Desktop running, `docker compose` v2, ~4 GB RAM free.
 
 ```bash
 # 1. Clone
@@ -350,6 +328,8 @@ This creates:
 - **VPC and private subnets** used by the EKS cluster
 - **S3 bucket** named by `artifact_bucket` for platform artifacts
 
+The application workloads run in AWS EKS. Terraform and `kubectl` commands may be launched from an administrator workstation or cloud shell, but they operate on AWS resources; Docker Compose and kind are optional local development tools only.
+
 > **Cost warning:** EKS control-plane, EC2 worker, NAT, load-balancer, and storage charges apply. Review the plan and AWS pricing before applying. The current Terraform backend is local; configure a protected remote S3 backend and state locking before a shared deployment.
 
 ```bash
@@ -494,24 +474,25 @@ done
 ### Step 10 — Access the Platform
 
 ```bash
-# Option A: Port-forward the portal
+# Temporary access from your workstation to the remote AWS EKS cluster:
 kubectl -n portal port-forward svc/portal 8501:8501
 # Open http://localhost:8501
 
-# Option B: If ingress-nginx is installed, add to /etc/hosts:
-#   <INGRESS_IP>  ai-idp.local
-# Then open http://ai-idp.local
+# For ongoing AWS access, configure a DNS name, TLS, and an access-controlled
+# ingress/load balancer. The example ingress manifest uses the placeholder host
+# idp.local and does not provision AWS ingress infrastructure by itself.
 
 # Grafana
 kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
-# Open http://localhost:3000  (admin / admin)
+# This also tunnels from your workstation to the AWS EKS cluster.
+# Open http://localhost:3000
 ```
 
 ---
 
 ### Step 11 — Set Up CI/CD (Jenkins)
 
-Create a Jenkins Multibranch Pipeline for this GitHub repository and configure a GitHub webhook (or periodic branch indexing) so pushes and pull requests trigger builds. The repository's `Jenkinsfile` runs tests on branches and pull requests. On `main`, it also builds and pushes five service images to GHCR, runs a report-only Trivy scan, updates the image namespace and tags in the GitOps manifests, and pushes that commit back to `main`. The `[skip ci]` marker on generated manifest commits prevents a build loop. ArgoCD then reconciles the updated manifests; Jenkins does not directly deploy to Kubernetes or run Terraform.
+Create a Jenkins Multibranch Pipeline for this GitHub repository and configure a GitHub webhook (or periodic branch indexing) so pushes and pull requests trigger builds. The repository's `Jenkinsfile` runs tests on branches and pull requests. On `main`, it also builds and pushes five service images to GHCR, runs a report-only Trivy scan, updates the image namespace and tags in the GitOps manifests, and pushes that commit back to `main`. The `[skip ci]` marker on generated manifest commits prevents a build loop. ArgoCD then reconciles the updated manifests to the AWS EKS cluster; Jenkins does not directly deploy to Kubernetes or run Terraform. Terraform provisions the AWS runtime infrastructure. The Jenkins controller/agent hosting is not provisioned by this repository's Terraform.
 
 The Jenkins agent must be Linux and needs Git, Python 3.12, Node.js 22 with npm, Docker CLI access to a running daemon, and Trivy. Install Jenkins Pipeline, Git, GitHub Branch Source, and Credentials Binding plugins; configure the Git installation as `Default` for the Git push credential binding.
 
@@ -542,8 +523,8 @@ terraform destroy -var="artifact_bucket=<globally-unique-bucket-name>"
 ## Makefile Reference
 
 ```bash
-make up           # docker compose up --build (local)
-make down         # docker compose down -v
+make up           # optional local Docker Compose development
+make down         # stop the local Docker Compose stack
 make test         # pip install dev deps + pytest
 make kind-up      # local k8s cluster + ArgoCD bootstrap (requires kind)
 make tf-plan      # terraform init + plan in envs/dev

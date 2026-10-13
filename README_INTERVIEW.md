@@ -39,10 +39,12 @@ flowchart TD
     Gateway --> Metrics
     AIOps --> Metrics
     Metrics --> Grafana[Grafana Mission Control]
-    GitHub[GitHub Actions] --> Images[Container images in GHCR]
-    GitHub --> Manifests[Updated Kubernetes manifests]
-    Manifests --> ArgoCD[Argo CD]
-    ArgoCD --> Cluster[Kubernetes cluster]
+    Repo[GitHub repository: source + GitOps] -->|webhook| Jenkins[Jenkins CI]
+    Jenkins -->|build, scan, push| Images[Container images in GHCR]
+    Jenkins -->|commit image tags| Repo
+    Repo --> ArgoCD[Argo CD]
+    ArgoCD -->|sync manifests| Cluster[AWS EKS]
+    Images -->|EKS nodes pull| Cluster
     Terraform[Terraform: AWS network, EKS, S3] --> Cluster
 ```
 
@@ -62,7 +64,7 @@ The web portal is the entry point, but it does not contain the domain logic. It 
 | Prometheus | Scrapes service metrics and answers PromQL queries | Prometheus |
 | Grafana | Displays service and platform metrics in Mission Control | Grafana dashboard provisioned from repository files |
 | Docker Compose | Runs the local multi-container version | Docker Compose |
-| GitHub Actions + Argo CD | Tests/builds images and reconciles Kubernetes resources from Git | GitHub Actions, GHCR, Kubernetes manifests, Argo CD |
+| Jenkins + Argo CD | Jenkins tests and builds images; Argo CD reconciles Kubernetes resources from Git | Jenkins, GHCR, Kubernetes manifests, Argo CD |
 | Terraform | Defines AWS networking, EKS, and an S3 bucket | Terraform AWS provider and modules |
 
 The four backend services expose `/healthz` and `/metrics`. The portal listens on port `8501`; Compose maps backend containers to host ports `8001` through `8004`. Inside the Compose network, the portal server communicates on container port `8000` using service names and presents same-origin `/api` routes to the browser.
@@ -134,21 +136,21 @@ Prometheus scrapes the backend services. Grafana uses Prometheus as a data sourc
 
 ## 6. From a Code Change to a Running Service
 
-The intended Kubernetes delivery path is:
+The intended AWS EKS delivery path is:
 
-1. A developer pushes a code change or opens a pull request.
-2. GitHub Actions installs the development requirements, installs Node.js dependencies, builds the portal bundle, and runs pytest. The checked-in workflow does not currently run a lint step.
-3. On pushes to `main`, the workflow builds five service images and pushes them to GitHub Container Registry (GHCR).
-4. Trivy scans each image for critical vulnerabilities, but the workflow is currently report-only: `exit-code` is `0`, so findings do not block the pipeline.
-5. The workflow updates image tags in the Kustomize manifests and pushes that Git change.
-6. Argo CD watches the GitOps application definitions and applies the desired Kubernetes manifests to the cluster. Automated sync, pruning, and self-healing are configured in the manifests.
+1. A developer pushes a code change or opens a pull request in GitHub.
+2. Jenkins installs the development requirements and Node.js dependencies, builds the portal bundle, and runs pytest.
+3. On pushes to `main`, Jenkins builds five service images and pushes them to GitHub Container Registry (GHCR).
+4. Trivy scans each image for critical vulnerabilities, but the scan is report-only: `exit-code` is `0`, so findings do not block the pipeline.
+5. Jenkins updates image tags in the Kustomize manifests and pushes that Git change to the same repository.
+6. Argo CD watches the GitOps application definitions and applies the desired Kubernetes manifests to AWS EKS. Automated sync, pruning, and self-healing are configured in the manifests.
 7. Kubernetes runs the containers and uses health probes and resource requests/limits where configured.
 
-Terraform is a separate infrastructure-as-code layer. In the checked-in configuration it uses the AWS provider and modules for networking, EKS, and S3 storage. Terraform provisions infrastructure; Argo CD reconciles application resources inside Kubernetes. They solve different layers of the deployment problem.
+Terraform is a separate infrastructure-as-code layer. In the checked-in configuration it uses the AWS provider and modules for networking, EKS, and S3 storage. Terraform provisions the AWS infrastructure; Argo CD reconciles application resources inside EKS. Jenkins hosting is not provisioned by the checked-in Terraform.
 
 ### Environment and deployment configuration
 
-The checked-in Terraform configures AWS networking, EKS, and S3. The Kubernetes portal manifest configures one Development profile; local Compose also defaults to Development. Add actual Staging and Production service URLs to `IDP_ENVIRONMENTS` only after those services exist. In-cluster pod/log access uses the portal's current Kubernetes identity, so deploy one console per cluster/environment unless a separately secured cross-cluster operations API is provided.
+The checked-in Terraform configures AWS networking, EKS, and S3. The Kubernetes portal manifest configures one Development profile; optional local Compose also defaults to Development. Add actual Staging and Production service URLs to `IDP_ENVIRONMENTS` only after those services exist. In-cluster pod/log access uses the portal's current Kubernetes identity, so deploy one console per cluster/environment unless a separately secured cross-cluster operations API is provided.
 
 ## 7. Run and Demonstrate It Locally
 
@@ -185,7 +187,7 @@ Stop the stack with `docker compose down`. The repository's `make test` target r
 
 ### A 60-second version
 
-“I built an AI-powered internal developer platform prototype to bring common developer and operations workflows into one place. Its FastAPI portal serves a custom Three.js operations console with a 3D service map, environment health, deployment-risk checks, an LLM copilot, cost planning, and report export. The console talks to separate FastAPI services for docs retrieval, model serving, LLM access, and AIOps. Prometheus and Grafana provide observability; Docker Compose runs the local stack, while Kubernetes manifests and Argo CD describe the GitOps path. Terraform currently provisions AWS networking, EKS, and S3. I’m careful to say the risk model uses synthetic data, environment health is only live when configured, cost figures are estimates, and privileged logs require an access token.”
+“I built an AI-powered internal developer platform prototype to bring common developer and operations workflows into one place. Its FastAPI portal serves a custom Three.js operations console with a 3D service map, environment health, deployment-risk checks, an LLM copilot, cost planning, and report export. The console talks to separate FastAPI services for docs retrieval, model serving, LLM access, and AIOps. Prometheus and Grafana provide observability. Jenkins builds and pushes images, Argo CD reconciles the Kubernetes manifests, and Terraform provisions the AWS VPC, EKS cluster, and S3 bucket. Docker Compose is available only as an optional local development path. I’m careful to say the risk model uses synthetic data, environment health is only live when configured, cost figures are estimates, and privileged logs require an access token.”
 
 ### A simple explanation of the architecture
 
