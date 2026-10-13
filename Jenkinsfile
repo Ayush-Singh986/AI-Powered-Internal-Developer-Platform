@@ -72,11 +72,12 @@ pipeline {
                 expression { env.SKIP_CI != 'true' }
             }
             steps {
-                sh 'python3 -m venv .venv'
-                sh '.venv/bin/python -m pip install -r requirements-dev.txt'
+                sh """
+                    docker run --rm                       -v "\$WORKSPACE:/workspace"                       -w /workspace                       python:3.13-slim                       sh -c 'python -m venv .venv && .venv/bin/python -m pip install --upgrade pip && .venv/bin/python -m pip install -r requirements-dev.txt && .venv/bin/python -m pytest -q tests'
+                """
+
                 sh 'npm ci --prefix services/portal/web'
                 sh 'npm run build --prefix services/portal/web'
-                sh '.venv/bin/python -m pytest -q tests'
             }
         }
 
