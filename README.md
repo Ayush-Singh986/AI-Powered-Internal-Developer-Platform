@@ -1,6 +1,5 @@
 # AI-Powered Internal Developer Platform
 
-[![CI](https://github.com/your-org/ai-idp/actions/workflows/ci.yaml/badge.svg)](https://github.com/your-org/ai-idp/actions)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![ArgoCD](https://img.shields.io/badge/GitOps-ArgoCD-orange.svg)](https://argo-cd.readthedocs.io/)
@@ -23,7 +22,7 @@ For a beginner-friendly explanation and interview Q&A, see [README_INTERVIEW.md]
 │     │  git push                                                                  │
 │     ▼                                                                            │
 │  ┌────────────────┐    ┌──────────────────────────────────────────────────────┐ │
-│  │  GitHub Actions│───▶│                    GitOps Repo                       │ │
+│  │    Jenkins     │───▶│                    GitOps Repo                       │ │
 │  │  CI Pipeline   │    │  gitops/apps/  ←  ArgoCD watches  →  gitops/manifests│ │
 │  │ test·build·scan│    └───────────────────────┬──────────────────────────────┘ │
 │  └────────────────┘                            │ ArgoCD syncs                   │
@@ -73,7 +72,7 @@ For a beginner-friendly explanation and interview Q&A, see [README_INTERVIEW.md]
 ```mermaid
 flowchart TD
     Dev["👨‍💻 Developer\ngit push"]
-    CI["⚙️ GitHub Actions\ntest · build · scan · push image"]
+    CI["⚙️ Jenkins\ntest · build · scan · push image"]
     Repo["📁 GitOps Repo\ngitops/apps/ & gitops/manifests/"]
     Argo["🔄 ArgoCD\nApp-of-Apps pattern"]
     TF["🏗️ Terraform\nVPC · EKS · S3"]
@@ -128,7 +127,7 @@ This project is an internal developer platform (IDP): a set of shared tools that
 
 #### 1. A code change enters the delivery path
 
-A developer pushes a change to GitHub. GitHub Actions runs the project checks, builds the portal's browser assets, and builds and scans service images as configured by the workflow. This is the continuous integration (CI) part: it checks that a change is ready to package. CI is not the cluster controller and does not directly keep the live system reconciled.
+A developer pushes a change to GitHub. Jenkins runs the project checks and builds the portal's browser assets. On `main`, it also builds and scans the service images, pushes them to GHCR, and updates the GitOps manifests. This is the continuous integration (CI) part: it checks that a change is ready to package. CI is not the cluster controller and does not directly keep the live system reconciled.
 
 #### 2. Terraform provides the infrastructure
 
@@ -265,8 +264,7 @@ docker compose down -v       # stops and removes containers + volumes
 
 ```
 ai-idp/
-├── .github/
-│   └── workflows/ci.yaml          # frontend build → test → image build/scan → GitOps tag update
+├── Jenkinsfile                    # test → build/scan/push images → GitOps tag update
 ├── deploy/
 │   └── local/
 │       ├── prometheus.yml         # scrape all 4 services
@@ -511,15 +509,20 @@ kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
 
 ---
 
-### Step 11 — Set Up CI/CD (GitHub Actions)
+### Step 11 — Set Up CI/CD (Jenkins)
 
-Add these secrets to your GitHub repo (`Settings → Secrets and variables → Actions`):
+Create a Jenkins Multibranch Pipeline for this GitHub repository and configure a GitHub webhook (or periodic branch indexing) so pushes and pull requests trigger builds. The repository's `Jenkinsfile` runs tests on branches and pull requests. On `main`, it also builds and pushes five service images to GHCR, runs a report-only Trivy scan, updates the image namespace and tags in the GitOps manifests, and pushes that commit back to `main`. The `[skip ci]` marker on generated manifest commits prevents a build loop. ArgoCD then reconciles the updated manifests; Jenkins does not directly deploy to Kubernetes or run Terraform.
 
-| Secret | Value |
-|---|---|
-| `ANTHROPIC_API_KEY` | Optional provider key if you intentionally configure real Anthropic calls |
+The Jenkins agent must be Linux and needs Git, Python 3.12, Node.js 22 with npm, Docker CLI access to a running daemon, and Trivy. Install Jenkins Pipeline, Git, GitHub Branch Source, and Credentials Binding plugins; configure the Git installation as `Default` for the Git push credential binding.
 
-The checked-in CI pipeline uses the automatic `GITHUB_TOKEN` package permission. It builds the Vite console and runs pytest on pull requests and pushes, then on `main` builds five images, runs a report-only Trivy scan, updates Kustomize tags, and pushes the manifest commit. It does not currently run Terraform or deploy to AWS.
+Create these Jenkins credentials:
+
+| Credential ID | Kind | Value |
+|---|---|---|
+| `ghcr-credentials` | Username with password | GitHub username and a token with permission to write GHCR packages |
+| `github-push-credentials` | Username with password | GitHub username and a token with permission to push commits to this repository |
+
+Set the `IMAGE_NAMESPACE` build parameter to the lowercase GitHub username or organization that owns the GHCR packages. Keep both tokens in Jenkins Credentials; do not add them to the repository. The pipeline does not run Terraform or deploy directly to AWS.
 
 ---
 
