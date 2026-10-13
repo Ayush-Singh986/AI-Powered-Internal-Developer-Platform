@@ -43,6 +43,8 @@ Developer pushes code
 
 ### Interactive Mermaid Diagram
 
+For a very simple, step-by-step explanation of this diagram, see [The Architecture Diagram, in Simple English](README_DIAGRAM.md).
+
 ```mermaid
 flowchart TD
     Dev["👨‍💻 Developer\ngit push"]
