@@ -5,5 +5,5 @@ resources:
   - service.yaml
   - servicemonitor.yaml
 images:
-  - name: ghcr.io/YOUR_GITHUB_USER/idp-docs-assistant
+  - name: ghcr.io/ayush-singh986/idp-docs-assistant
     newTag: latest

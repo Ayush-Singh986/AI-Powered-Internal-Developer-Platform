@@ -15,7 +15,7 @@ spec:
       securityContext: {runAsNonRoot: true, runAsUser: 10001}
       containers:
         - name: portal
-          image: ghcr.io/YOUR_GITHUB_USER/idp-portal:latest
+          image: ghcr.io/ayush-singh986/idp-portal:latest
           ports: [{name: http, containerPort: 8501}]
           env:
             - {name: DOCS_URL, value: "http://docs-assistant.docs-assistant.svc.cluster.local:8000"}

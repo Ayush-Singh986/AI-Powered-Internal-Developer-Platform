@@ -14,7 +14,7 @@ spec:
       securityContext: {runAsNonRoot: true, runAsUser: 10001}
       containers:
         - name: llm-gateway
-          image: ghcr.io/YOUR_GITHUB_USER/idp-llm-gateway:latest
+          image: ghcr.io/ayush-singh986/idp-llm-gateway:latest
           ports: [{name: http, containerPort: 8000}]
           env:
             - {name: LLM_PROVIDER, value: "mock"}

@@ -15,7 +15,7 @@ spec:
       securityContext: {runAsNonRoot: true, runAsUser: 10001}
       containers:
         - name: aiops-agent
-          image: ghcr.io/YOUR_GITHUB_USER/idp-aiops-agent:latest
+          image: ghcr.io/ayush-singh986/idp-aiops-agent:latest
           ports: [{name: http, containerPort: 8000}]
           env:
             - {name: PROMETHEUS_URL, value: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"}

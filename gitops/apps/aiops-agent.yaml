@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/YOUR_GITHUB_USER/ai-idp.git
+    repoURL: https://github.com/Ayush-Singh986/AI-Powered-Internal-Developer-Platform.git
     targetRevision: main
     path: gitops/manifests/aiops-agent
   destination:

@@ -14,7 +14,7 @@ spec:
       securityContext: {runAsNonRoot: true, runAsUser: 10001}
       containers:
         - name: model-serving
-          image: ghcr.io/YOUR_GITHUB_USER/idp-model-serving:latest
+          image: ghcr.io/ayush-singh986/idp-model-serving:latest
           ports: [{name: http, containerPort: 8000}]
           env:
             - {name: MODEL_VERSION, value: "v1-synthetic"}

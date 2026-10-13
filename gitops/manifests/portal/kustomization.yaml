@@ -6,5 +6,5 @@ resources:
   - ingress.yaml
   - ops-rbac.yaml
 images:
-  - name: ghcr.io/YOUR_GITHUB_USER/idp-portal
+  - name: ghcr.io/ayush-singh986/idp-portal
     newTag: latest

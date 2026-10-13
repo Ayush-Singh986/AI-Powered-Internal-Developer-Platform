@@ -6,5 +6,5 @@ resources:
   - servicemonitor.yaml
   - rbac.yaml
 images:
-  - name: ghcr.io/YOUR_GITHUB_USER/idp-aiops-agent
+  - name: ghcr.io/ayush-singh986/idp-aiops-agent
     newTag: latest

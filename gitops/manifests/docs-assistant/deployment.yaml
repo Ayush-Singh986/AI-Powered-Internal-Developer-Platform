@@ -14,7 +14,7 @@ spec:
       securityContext: {runAsNonRoot: true, runAsUser: 10001}
       containers:
         - name: docs-assistant
-          image: ghcr.io/YOUR_GITHUB_USER/idp-docs-assistant:latest
+          image: ghcr.io/ayush-singh986/idp-docs-assistant:latest
           ports: [{name: http, containerPort: 8000}]
           env:
             - {name: GATEWAY_URL, value: "http://llm-gateway.llm-gateway.svc.cluster.local:8000"}
