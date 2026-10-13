@@ -12,6 +12,21 @@ This guide takes the project from a GitHub checkout to running services on AWS E
 - Argo CD, which reads the Git deployment files and updates the AWS EKS applications.
 - Five application services, Prometheus, and Grafana inside EKS.
 
+### AWS infrastructure created by Terraform
+
+The development Terraform configuration creates the following AWS infrastructure in `ap-south-1` by default:
+
+| AWS resource | Configuration |
+| --- | --- |
+| VPC and networking | `idp-dev` VPC with CIDR `10.20.0.0/16`, public and private subnets across `ap-south-1a` and `ap-south-1b`, and one shared NAT gateway for private-subnet egress. |
+| Amazon EKS | EKS cluster named `idp-dev`, running Kubernetes `1.35`, with its API endpoint publicly reachable by default. Restrict the endpoint to trusted IPs before applying, as described in step 3. |
+| EC2 worker nodes | EKS-managed node group in the private subnets. It defaults to two `t3.large` instances, with autoscaling bounds of one to four nodes. The node count and instance type can be changed in the cluster module inputs. |
+| Amazon S3 | One artifact bucket whose globally unique name you provide. Versioning and AES-256 server-side encryption are enabled, and all forms of public access are blocked. |
+
+The EKS control plane is managed by AWS; the worker nodes are EC2 instances. EKS, EC2, NAT Gateway, and data transfer may incur charges. Review the Terraform plan and AWS pricing before applying it.
+
+Jenkins, GHCR, Argo CD, the application services, Prometheus, and Grafana are not all Terraform-created AWS resources: Jenkins is installed separately, GHCR is hosted by GitHub, and Argo CD plus the application and monitoring workloads are installed into EKS in later steps. This Terraform configuration does not create an internet-facing application load balancer, database, or Jenkins EC2 instance.
+
 ## 1. Install and check the command-line tools
 
 Install these tools on your administrator workstation or AWS management host:
