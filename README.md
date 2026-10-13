@@ -43,6 +43,8 @@ Developer pushes code
                  Terraform provisions AWS VPC, EKS, and S3
 ```
 
+![Animated architecture of the AWS deployment, CI/CD delivery flow, platform services, and observability](docs/ai-idp-architecture.gif)
+
 ### Interactive Mermaid Diagram
 
 For a very simple, step-by-step explanation of this diagram, see [The Architecture Diagram, in Simple English](README_DIAGRAM.md).
