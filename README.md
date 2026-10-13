@@ -10,6 +10,7 @@
 
 For a beginner-friendly explanation and interview Q&A, see [README_INTERVIEW.md](README_INTERVIEW.md).
 For step-by-step AWS EKS deployment commands, see [README_AWS_DEPLOYMENT.md](README_AWS_DEPLOYMENT.md).
+For simple definitions, purposes, and reasons for the technologies used, see [README_TECH_STACK.md](README_TECH_STACK.md).
 
 ---
 
