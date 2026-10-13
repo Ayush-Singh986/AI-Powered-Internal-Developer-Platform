@@ -3,6 +3,7 @@ __pycache__/
 .venv/
 .terraform/
 *.tfstate*
+tfplan
 *.joblib
 .env
 services/portal/web/node_modules/

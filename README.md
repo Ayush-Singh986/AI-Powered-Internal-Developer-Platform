@@ -9,6 +9,7 @@
 > An AI-powered Internal Developer Platform prototype designed for deployment to AWS EKS: documentation RAG, deployment-risk scoring, a shared LLM gateway, AIOps incident handling, and an operations console with environment health, workload logs, cost planning, and reports. Docker Compose and kind are optional local development paths, not the target deployment.
 
 For a beginner-friendly explanation and interview Q&A, see [README_INTERVIEW.md](README_INTERVIEW.md).
+For step-by-step AWS EKS deployment commands, see [README_AWS_DEPLOYMENT.md](README_AWS_DEPLOYMENT.md).
 
 ---
 

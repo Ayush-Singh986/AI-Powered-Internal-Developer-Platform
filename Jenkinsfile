@@ -11,7 +11,7 @@ pipeline {
     parameters {
         string(
             name: 'IMAGE_NAMESPACE',
-            defaultValue: 'YOUR_GITHUB_USER',
+            defaultValue: 'Ayush-Singh986',
             trim: true,
             description: 'GitHub username or organization that owns the GHCR images'
         )
