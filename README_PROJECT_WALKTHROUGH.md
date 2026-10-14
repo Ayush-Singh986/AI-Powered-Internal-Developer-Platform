@@ -106,3 +106,37 @@ The other README files focus on specific topics: `README.md` introduces the proj
 A developer starts the platform locally or opens the deployed Forge Console. The portal checks configured services and forwards each task to the service that owns it. The documentation assistant searches written guidance, the model-serving service demonstrates a release-risk prediction, the LLM gateway centralizes language-model calls, and the AIOps agent watches metrics and records incidents. Prometheus gathers runtime measurements, and Grafana presents them. Separately, Jenkins tests and packages code, Git stores the image versions Kubernetes should run, Argo CD synchronizes that desired state, and Terraform supplies the AWS infrastructure underneath it.
 
 This project is a learning and demonstration platform rather than a production-ready control plane. Before using it with real teams, replace synthetic training data and illustrative prices, configure secure identity and secret handling, review network and Kubernetes permissions, make incident data durable if required, and test deployment rollback and any automated remediation.
+
+## Technical words in simple English
+
+**IDP** means Internal Developer Platform. It is a collection of tools that helps engineers do common development and operations work from one place.
+
+**TF-IDF** means “Term Frequency–Inverse Document Frequency.” It is a way for a search system to compare words in a question with words in documents. A word that appears often in a particular document, but not in every document, can help identify which document is most relevant. In this project, TF-IDF helps the documentation assistant find runbook sections related to a question.
+
+**RAG** means Retrieval-Augmented Generation. The system first retrieves relevant written information, then gives that information to a language model to help it form an answer.
+
+**LLM** means Large Language Model. It is an AI system that can understand and generate text. The project sends requests to an LLM through its shared gateway.
+
+**API** means Application Programming Interface. It is a defined way for one piece of software to ask another piece of software to do something or return information.
+
+**FastAPI** is the Python framework used to build the services' web APIs. **Vite** is a tool that builds and serves the portal's browser application. **Three.js** is a JavaScript library used to display interactive 3D graphics.
+
+**Docker** packages an application and the things it needs into an image that can run as a container. **Docker Compose** runs several related containers together on one computer, which is how the local demonstration is started.
+
+**Kubernetes** is a system for running and managing containers across machines. **EKS** means Amazon Elastic Kubernetes Service; it is AWS's managed Kubernetes service. A **cluster** is the group of machines and control components that run Kubernetes applications.
+
+**CI/CD** means Continuous Integration and Continuous Delivery or Deployment. It describes automated steps that check code, package it, and help deliver it to an environment. In this project, Jenkins performs the build and publishing steps.
+
+**Jenkins** is the automation server that runs the project's tests, builds its images, and publishes them. **GHCR** means GitHub Container Registry, where the built container images are stored.
+
+**GitOps** is an approach where Git stores the desired deployment configuration and an automated tool applies that configuration to the running system. **Argo CD** is the tool in this project that watches the Git configuration and synchronizes it with Kubernetes.
+
+**Terraform** is a tool for describing and creating infrastructure, such as networks, clusters, and storage, using configuration files. **VPC** means Virtual Private Cloud, a logically separated network in AWS. **S3** means Amazon Simple Storage Service, which stores files and other data as objects.
+
+**Prometheus** collects and stores measurements about running services. These measurements are called **metrics**. **Grafana** displays metrics in dashboards so people can understand what is happening.
+
+**A container image** is the packaged template used to start a container. A **container** is a running copy of an image. A **manifest** is a configuration file describing resources Kubernetes should create, such as an application deployment or network service.
+
+**A cache** temporarily keeps a result so the same work does not have to be repeated. A **token** is a small piece of text processed by a language model; token counts help estimate model usage. **Synthetic data** is artificially generated example data, rather than information collected from real production activity.
+
+**A health check** is a small request used to see whether a service is responding. **Latency** is the time a service takes to respond. **Remediation** means taking action to address a problem; in this project, an optional remediation can restart a supported Kubernetes deployment.
