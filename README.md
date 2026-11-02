@@ -473,8 +473,11 @@ deployment-specific evidence are in [docs/deployment.md](docs/deployment.md).
 - The Sealed Secrets controller creates a different encryption key per
   cluster. kind and EKS each need their own sealed manifests; none can be
   produced or validated without access to the target cluster.
-- Docker, kind, kubectl, Helm, and GNU Make are unavailable in this editing
-  environment. `make demo`, `make test`, and cluster acceptance checks have
-  therefore not been run here; do not publish them as passing.
+- All 25 service unit tests and the Docker Compose smoke test pass. The smoke
+  test exposed and helped fix non-root SQLite volume permissions in the agent
+  and gateway images. The interactive demo started, but its full endpoint
+  check could not be completed because the WSL environment timed out. kind,
+  kubectl, and Helm are unavailable, so Kubernetes/EKS acceptance is still
+  unverified.
 
 
