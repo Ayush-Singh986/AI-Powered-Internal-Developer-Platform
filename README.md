@@ -47,12 +47,15 @@ flowchart LR
 
 ## Quick start: local demo
 
-Requires Docker Compose v2, Git, GNU Make, and Bash. From the project folder
-(after cloning the AIOps platform repository):
+Requires Docker Compose v2, Git, GNU Make, and Bash. Start in the directory
+where you want to clone the repository:
 
-1. Clone the AIOps platform repository using its confirmed URL and open its
-   root directory. The canonical clone URL is not included until the exact
-   repository name is confirmed.
+1. Clone the repository and open its root directory:
+
+   ```bash
+   git clone https://github.com/Ayush-Singh986/AI-Powered-Internal-Developer-Platform.git
+   cd AI-Powered-Internal-Developer-Platform
+   ```
 2. Start the stack: `make demo`. This builds the services and starts the mock
    LLM provider; no external API key is needed.
 3. Open the portal at <http://localhost:8501> and Grafana at
@@ -66,11 +69,8 @@ Requires Docker Compose v2, Git, GNU Make, and Bash. From the project folder
    endpoint; it does not stop or damage a service.
 6. Stop the local stack with `make demo-down`.
 
-The canonical clone URL was not confirmed for this platform repository. The
-workspace's configured Git remote points to a different project; do not copy
-that remote as this project's clone URL. Use the actual AIOps repository URL
-before publishing. On Windows, run the Bash commands below in Git Bash or WSL
-with Docker Desktop integration enabled.
+On Windows, run the Bash commands below in Git Bash or WSL with Docker
+Desktop integration enabled.
 
 ## Project components
 
@@ -240,20 +240,50 @@ sealed credentials for service authentication and Grafana.
 
 ### C. Deploy to AWS EKS
 
-EKS provisions real AWS resources and can incur charges. Follow each step
-carefully and destroy the demo cluster when finished. The full command-by-
-command Bash and PowerShell guide is in [docs/deployment.md](docs/deployment.md).
+EKS provisions billable AWS resources. This is a demo deployment, not a
+production-ready network or security configuration. Use the same GitHub
+repository on branch `main` for Argo CD and GitHub Actions. The complete
+Bash/PowerShell guide is in [docs/deployment.md](docs/deployment.md).
 
-1. **Install and configure tools.** Install Terraform `>=1.10`, AWS CLI,
-   kubectl, Git, GNU Make, and kubeseal. Configure an AWS identity permitted
-   to create the Terraform resources. Restrict the EKS API endpoint CIDR in
-   `terraform/terraform.tfvars`.
-2. **Create remote Terraform state.** Create a private, versioned, encrypted
-   S3 bucket. Copy `terraform/backend.hcl.example` and
-   `terraform/terraform.tfvars.example` to their local, ignored counterparts;
-   set the bucket, region, supported EKS version, node type, and operator CIDR.
-3. **Review and apply infrastructure.** From the repository root, initialize
-   Terraform, validate, and inspect the plan before authorizing any apply:
+1. **Install tools and configure AWS access.** Install Terraform `>=1.10`,
+   AWS CLI, kubectl, kubeseal, Git, GNU Make, and Bash. Configure AWS
+   credentials with permission to create the Terraform resources, then verify
+   the active account and identity:
+
+   ```bash
+   aws sts get-caller-identity
+   ```
+
+   Choose a region where the configured EKS Kubernetes version is supported.
+   The example defaults to `us-east-1`, project `aiops-demo`, environment
+   `demo`, and one `t3.medium` node.
+2. **Create remote Terraform state.** Use a unique private S3 bucket for
+   Terraform state; enable public-access blocking, versioning, and encryption.
+   Example for `us-east-1`:
+
+   ```bash
+   export AWS_REGION=us-east-1
+   export TF_STATE_BUCKET=replace-with-globally-unique-bucket-name
+   aws s3api create-bucket --bucket "$TF_STATE_BUCKET" --region "$AWS_REGION"
+   aws s3api put-public-access-block --bucket "$TF_STATE_BUCKET" \
+     --public-access-block-configuration \
+     BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+   aws s3api put-bucket-versioning --bucket "$TF_STATE_BUCKET" \
+     --versioning-configuration Status=Enabled
+   aws s3api put-bucket-encryption --bucket "$TF_STATE_BUCKET" \
+     --server-side-encryption-configuration \
+     '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+   cp terraform/backend.hcl.example terraform/backend.hcl
+   cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+   ```
+
+   Edit `terraform/backend.hcl` to set the bucket and region. Edit
+   `terraform/terraform.tfvars` to set the region, a currently supported
+   `cluster_version`, and `cluster_endpoint_public_access_cidrs` to your
+   operator's public IP in `/32` notation. Never use `0.0.0.0/0` for the
+   Kubernetes API endpoint.
+3. **Plan and create the infrastructure.** Run from the repository root.
+   Review the plan and AWS costs before confirming `apply`:
 
    ```bash
    terraform -chdir=terraform init -backend-config=backend.hcl
@@ -262,38 +292,111 @@ command Bash and PowerShell guide is in [docs/deployment.md](docs/deployment.md)
    terraform -chdir=terraform apply
    ```
 
-   This creates the VPC, EKS cluster, ECR repositories, and supporting
-   resources. The VPC CNI option is configured for NetworkPolicies; this
-   setting still needs a runtime policy-enforcement test.
-4. **Configure GitOps and CI access.** Update repository URLs using
-   `scripts/set-repo.sh OWNER/PLATFORM_REPO`, then commit and push `argocd/`.
-   Set the GitHub Actions variables/permissions documented in
-   [docs/deployment.md](docs/deployment.md) so CI can publish immutable
-   images to ECR using OIDC. Public GitHub repositories work as-is; private
-   repositories need a deploy key or token configured in Argo CD.
-5. **Connect kubectl and install Argo CD.** Use Terraform outputs to configure
-   kubeconfig, install the pinned Argo CD `v3.5.6` manifest, wait for its
-   server, and apply `argocd/root-application.yaml`. The guide in
-   [docs/deployment.md](docs/deployment.md) gives the exact commands.
-6. **Generate EKS-specific secrets.** Wait for Sealed Secrets, export the
-   service token, action token, Grafana password, and real provider API key,
-   then run `scripts/seal-secrets.sh eks`. Commit and push only
-   `k8s/sealed-secrets/eks/`. Secrets sealed for kind cannot be decrypted by
-   EKS.
-7. **Wait for CI and Argo CD.** Push service changes to trigger each service
-   workflow to test, scan, and publish its commit-tagged image. Argo CD
-   reconciles the desired state from Git. Confirm all applications are
-   Healthy/Synced, inspect `kubectl get pods -A` and
-   `kubectl get ingress -A`, and verify that only the portal and Grafana have
-   ingress routes.
-8. **Check resources and security.** Use `kubectl top pods -A`, inspect
-   restarts and OOM events, exercise the service auth/budget/incident checks,
-   and test NetworkPolicy enforcement from allowed and denied pods. Save real
-   evidence and measured results; do not infer them from configuration alone.
-9. **Destroy billable resources.** Run `make eks-destroy` after collecting
-   evidence. Confirm EKS, EC2, load balancers, and EBS volumes are gone. The
-   remote state bucket is separate and is retained unless you deliberately
-   remove it.
+   Terraform creates the VPC, EKS cluster and node group, ECR repositories,
+   and supporting IAM/add-on resources. The remote state bucket is separate
+   and is not removed by `terraform destroy`.
+4. **Allow GitHub Actions to publish images.** In AWS IAM, configure the
+   GitHub Actions OIDC provider and a role restricted to this repository.
+   Grant the role only the access needed for the Terraform plan/state and ECR
+   image-publishing workflows; do not store long-lived AWS access keys in
+   GitHub. In the repository's **Settings → Secrets and variables → Actions**,
+   add:
+
+   - Secret `AWS_TERRAFORM_ROLE_ARN`: the OIDC role ARN.
+   - Variables `AWS_REGION` and `TF_STATE_BUCKET`: the values used above.
+   - Variables `AWS_PROJECT_NAME` and `AWS_ENVIRONMENT`: the same values as
+     `project_name` and `environment` in `terraform/terraform.tfvars`.
+   - Variable `CLUSTER_ADMIN_CIDRS`: a Terraform list, for example
+     `["203.0.113.10/32"]`, matching the operator CIDR in `terraform.tfvars`.
+
+   The Terraform pull-request workflow also assumes this role. Because the
+   role can publish images, only allow trusted pull requests in its OIDC trust
+   policy; use a separate read-only role/workflow for untrusted pull requests.
+   The image-publishing workflows assume the role on `main`.
+5. **Point Argo CD at the repository.** Replace the repository placeholders,
+   then commit and push this change before bootstrapping Argo CD:
+
+   ```bash
+   scripts/set-repo.sh Ayush-Singh986/AI-Powered-Internal-Developer-Platform
+   git add argocd
+   git commit -m "Configure Argo CD repository"
+   git push
+   ```
+
+   Public repositories need no additional Argo CD credentials. For a private
+   repository, configure a deploy key or repository token in Argo CD before
+   installing the root Application.
+6. **Build and publish the five service images.** In GitHub **Actions**, run
+   each `Build ...` workflow on branch `main`: AIOps agent, LLM gateway,
+   model serving, portal, and RAG. Each workflow tests and scans its service,
+   pushes a commit-SHA-tagged image to ECR, and commits the image tag to
+   `k8s/base/`. Wait for all five runs to pass before proceeding. These
+   workflows support both pushes to service paths and manual dispatch.
+7. **Connect to EKS and install Argo CD.** Get the cluster credentials and
+   install the repository's pinned Argo CD release, then apply the root
+   Application:
+
+   ```bash
+   cluster="$(terraform -chdir=terraform output -raw cluster_name)"
+   region="$(terraform -chdir=terraform output -raw cluster_region)"
+   aws eks update-kubeconfig --name "$cluster" --region "$region"
+   aws sts get-caller-identity
+   kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.6/manifests/install.yaml
+   kubectl -n argocd rollout status deployment/argocd-server --timeout=5m
+   kubectl apply -f argocd/root-application.yaml
+   ```
+
+   Use the AWS identity that created the cluster, or grant the active
+   identity access to the EKS cluster.
+   Argo CD installs the infrastructure charts, including Sealed Secrets.
+   Wait for its controller before creating application credentials:
+
+   ```bash
+   kubectl -n kube-system rollout status deployment/sealed-secrets-controller --timeout=5m
+   ```
+8. **Create EKS-encrypted credentials.** Enter strong tokens and your
+   provider's API key in the shell without putting values in command history:
+
+   ```bash
+   read -r -s -p "Provider API key: " LLM_API_KEY; printf '\n'; export LLM_API_KEY
+   read -r -s -p "Shared service token: " SERVICE_AUTH_TOKEN; printf '\n'; export SERVICE_AUTH_TOKEN
+   read -r -s -p "Action approval token: " AIOPS_ACTION_TOKEN; printf '\n'; export AIOPS_ACTION_TOKEN
+   read -r -s -p "Grafana password: " GRAFANA_ADMIN_PASSWORD; printf '\n'; export GRAFANA_ADMIN_PASSWORD
+   scripts/seal-secrets.sh eks
+   git add k8s/sealed-secrets/eks
+   git commit -m "Add EKS sealed secrets"
+   git push
+   ```
+
+   Commit only the generated SealedSecret YAML files. Never commit plaintext
+   credentials. Sealed Secrets are tied to this EKS cluster and cannot be
+   reused on kind or another cluster.
+9. **Wait for deployment and configure access.** Confirm Argo CD applications
+   are synced and healthy, and inspect pods and ingress:
+
+   ```bash
+   kubectl get applications -n argocd
+   kubectl get pods -A
+   kubectl get ingress -A
+   kubectl get svc -n ingress-nginx
+   ```
+
+   The ingress controller provisions an AWS load balancer. The committed
+   ingress host `aiops.local` is only a local demo name. Before exposing the
+   application, configure DNS to the load balancer, update the portal host in
+   `k8s/base/portal/ingress.yaml` and the Grafana host and `root_url` in
+   `monitoring/kube-prometheus-values.yaml`, and configure TLS for both
+   ingresses. Commit and push those changes for Argo CD to apply. Do not expose
+   this demo over public HTTP.
+10. **Tear down the demo.** When finished, destroy the billable resources and
+    verify that EKS, EC2, load balancers, and EBS volumes are gone:
+
+    ```bash
+    make eks-destroy
+    ```
+
+    Terraform's S3 state bucket is retained; remove it separately only after
+    you no longer need the state.
 
 ## Services
 
@@ -373,10 +476,7 @@ deployment-specific evidence are in [docs/deployment.md](docs/deployment.md).
 - Docker, kind, kubectl, Helm, and GNU Make are unavailable in this editing
   environment. `make demo`, `make test`, and cluster acceptance checks have
   therefore not been run here; do not publish them as passing.
-- Portal/Grafana screenshots, the failure GIF, and the five-run results are
-  intentionally absent until captured from a real run. Keep
-  [docs/resume-bullet.md](docs/resume-bullet.md) unpublished until measurement
-  rows exist.
+
 
 ## Next steps
 

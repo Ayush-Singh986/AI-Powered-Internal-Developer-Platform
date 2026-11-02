@@ -178,13 +178,32 @@ charges. The VPC CNI add-on is configured to enable NetworkPolicies.
 
 ### Publish images and bootstrap Argo CD
 
-Configure GitHub repository variables for AWS region, project/environment,
-Terraform state bucket, and operator CIDRs. Configure an OIDC role restricted
-to this repository and branch with Terraform-plan and ECR permissions; do not
-add long-lived AWS access keys. Service workflows test, scan, and publish
-commit-SHA images; the GitOps manifest commit is marked `[skip ci]`. The
-workflows' push filters only match service/workflow source paths, so
-`k8s/**`-only commits do not start a build workflow.
+Configure these repository **Actions variables**:
+
+| Name | Value |
+|---|---|
+| `AWS_REGION` | The Terraform region. |
+| `AWS_PROJECT_NAME` | The same value as `project_name` in `terraform.tfvars`. |
+| `AWS_ENVIRONMENT` | The same value as `environment` in `terraform.tfvars`. |
+| `TF_STATE_BUCKET` | The private S3 bucket used for Terraform state. |
+| `CLUSTER_ADMIN_CIDRS` | A Terraform list of allowed operator CIDRs, e.g. `["203.0.113.10/32"]`. |
+
+Add the repository **Actions secret** `AWS_TERRAFORM_ROLE_ARN` with the ARN
+of an IAM role configured for GitHub Actions OIDC. Restrict its trust policy
+to this repository and the intended branch/workflows; grant only the S3 state
+and ECR permissions the workflows need. Do not add long-lived AWS access
+keys. The Terraform pull-request workflow also assumes this role, so its
+`pull_request` OIDC subject must be trusted if that workflow is enabled. Since
+the role can publish ECR images, only allow trusted pull requests or use a
+separate read-only role for Terraform plans.
+
+Each service workflow tests, scans, and publishes a commit-SHA image to ECR,
+then commits the new image reference to `k8s/base/`. To publish the initial
+images after creating the ECR repositories, manually run each `Build ...`
+workflow on branch `main` from GitHub Actions: AIOps agent, LLM gateway,
+model serving, portal, and RAG. The workflows also run on service-source
+pushes to `main`. Their push filters do not match `k8s/**`-only commits, and
+the GitOps manifest commits are marked `[skip ci]`.
 
 Configure the repo URL once with the platform repository's actual owner and
 name, then commit and push:
