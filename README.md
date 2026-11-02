@@ -478,15 +478,3 @@ deployment-specific evidence are in [docs/deployment.md](docs/deployment.md).
   therefore not been run here; do not publish them as passing.
 
 
-## Next steps
-
-1. Follow [docs/deployment.md](docs/deployment.md); run `make demo` and
-   `make test` from a fresh clone on a machine with Docker.
-2. Deploy kind with `make kind-up REPO=OWNER/PLATFORM_REPO`; verify the Argo
-   applications and save real screenshots/GIFs under `docs/evidence/`.
-3. Collect repeated measurements, update `docs/results.csv`, then finalize the
-   resume bullet.
-
-## License
-
-Licensed under Apache-2.0. See [LICENSE](LICENSE).
