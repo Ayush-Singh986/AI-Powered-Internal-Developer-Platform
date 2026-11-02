@@ -15,7 +15,7 @@ HTTP_REQUESTS = Counter("model_http_requests_total", "HTTP requests", ["method",
 HTTP_LATENCY = Histogram("model_http_request_duration_seconds", "HTTP request latency")
 BASE_URL = os.getenv("LLM_BASE_URL", "").rstrip("/")
 API_KEY = os.getenv("LLM_API_KEY", "")
-SERVICE_API_KEY = os.getenv("SERVICE_AUTH_TOKEN") or os.getenv("MODEL_SERVICE_API_KEY", "")
+SERVICE_API_KEY = os.getenv("MODEL_SERVICE_API_KEY", "")
 MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
 TIMEOUT = float(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
 

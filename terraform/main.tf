@@ -16,9 +16,9 @@ module "vpc" {
   azs                     = local.azs
   private_subnets         = ["10.40.1.0/24", "10.40.2.0/24"]
   public_subnets          = ["10.40.101.0/24", "10.40.102.0/24"]
-  enable_nat_gateway      = false
-  single_nat_gateway      = false
-  map_public_ip_on_launch = true
+  enable_nat_gateway      = true
+  single_nat_gateway      = true
+  map_public_ip_on_launch = false
 
   public_subnet_tags = {
     "kubernetes.io/role/elb"              = "1"
@@ -40,7 +40,7 @@ module "eks" {
   cluster_endpoint_private_access      = true
   cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
   vpc_id                               = module.vpc.vpc_id
-  subnet_ids                           = module.vpc.public_subnets
+  subnet_ids                           = module.vpc.private_subnets
 
   cluster_addons = {
     coredns    = { most_recent = true }
@@ -56,11 +56,11 @@ module "eks" {
     demo = {
       name           = "${local.name}-nodes"
       instance_types = var.node_instance_types
-      min_size       = 1
-      max_size       = 2
-      desired_size   = 1
+      min_size       = 2
+      max_size       = 4
+      desired_size   = 2
       capacity_type  = "ON_DEMAND"
-      subnet_ids     = module.vpc.public_subnets
+      subnet_ids     = module.vpc.private_subnets
       iam_role_additional_policies = {
         AmazonEBSCSIDriverPolicy = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
       }
@@ -69,6 +69,30 @@ module "eks" {
 
   tags = {
     Project = var.project_name
+  }
+}
+
+resource "aws_budgets_budget" "monthly" {
+  name         = "${local.name}-monthly"
+  budget_type  = "COST"
+  limit_amount = tostring(var.monthly_budget_limit)
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
+
+  notification {
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = 80
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "ACTUAL"
+    subscriber_email_addresses = [var.budget_alert_email]
+  }
+
+  notification {
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = 100
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "FORECASTED"
+    subscriber_email_addresses = [var.budget_alert_email]
   }
 }
 

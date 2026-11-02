@@ -7,10 +7,34 @@ if [[ $# -ne 1 || ( "$1" != "kind" && "$1" != "eks" ) ]]; then
 fi
 
 : "${LLM_API_KEY:=}"
-: "${SERVICE_AUTH_TOKEN:?set SERVICE_AUTH_TOKEN in the shell environment}"
+: "${RAG_SERVICE_TOKEN:?set RAG_SERVICE_TOKEN in the shell environment}"
+: "${MODEL_SERVICE_API_KEY:?set MODEL_SERVICE_API_KEY in the shell environment}"
+: "${LLM_GATEWAY_API_KEY:?set LLM_GATEWAY_API_KEY in the shell environment}"
+: "${PORTAL_GATEWAY_API_KEY:?set PORTAL_GATEWAY_API_KEY in the shell environment}"
+: "${LLM_GATEWAY_CLIENT_KEYS:?set LLM_GATEWAY_CLIENT_KEYS JSON in the shell environment}"
+: "${AGENT_SERVICE_TOKEN:?set AGENT_SERVICE_TOKEN in the shell environment}"
+: "${ALERTMANAGER_WEBHOOK_TOKEN:?set ALERTMANAGER_WEBHOOK_TOKEN in the shell environment}"
 : "${AIOPS_ACTION_TOKEN:?set AIOPS_ACTION_TOKEN in the shell environment}"
 : "${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in the shell environment}"
 : "${GRAFANA_ADMIN_USER:=admin}"
+
+service_tokens=(
+  "$RAG_SERVICE_TOKEN"
+  "$MODEL_SERVICE_API_KEY"
+  "$LLM_GATEWAY_API_KEY"
+  "$PORTAL_GATEWAY_API_KEY"
+  "$AGENT_SERVICE_TOKEN"
+  "$ALERTMANAGER_WEBHOOK_TOKEN"
+  "$AIOPS_ACTION_TOKEN"
+)
+for ((index = 0; index < ${#service_tokens[@]}; index++)); do
+  for ((other = index + 1; other < ${#service_tokens[@]}; other++)); do
+    if [[ "${service_tokens[index]}" == "${service_tokens[other]}" ]]; then
+      echo "Service, webhook, and action tokens must be distinct." >&2
+      exit 2
+    fi
+  done
+done
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 output="$root/k8s/sealed-secrets/$1"
@@ -41,9 +65,17 @@ seal_grafana() {
       > "$output/grafana-admin-monitoring.yaml"
 }
 
-for namespace in rag model-serving llm-gateway aiops-agent portal monitoring; do
-  seal "$namespace" service-auth SERVICE_AUTH_TOKEN "$SERVICE_AUTH_TOKEN"
-done
+seal rag rag-auth RAG_SERVICE_TOKEN "$RAG_SERVICE_TOKEN"
+seal model-serving model-serving-auth MODEL_SERVICE_API_KEY "$MODEL_SERVICE_API_KEY"
+seal llm-gateway llm-gateway-auth LLM_GATEWAY_CLIENT_KEYS "$LLM_GATEWAY_CLIENT_KEYS"
+seal llm-gateway model-serving-auth MODEL_SERVICE_API_KEY "$MODEL_SERVICE_API_KEY"
+seal aiops-agent agent-service-auth AGENT_SERVICE_TOKEN "$AGENT_SERVICE_TOKEN"
+seal aiops-agent llm-gateway-auth LLM_GATEWAY_API_KEY "$LLM_GATEWAY_API_KEY"
+seal aiops-agent rag-auth RAG_SERVICE_TOKEN "$RAG_SERVICE_TOKEN"
+seal aiops-agent alertmanager-webhook ALERTMANAGER_WEBHOOK_TOKEN "$ALERTMANAGER_WEBHOOK_TOKEN"
+seal portal agent-service-auth AGENT_SERVICE_TOKEN "$AGENT_SERVICE_TOKEN"
+seal portal llm-gateway-auth PORTAL_GATEWAY_API_KEY "$PORTAL_GATEWAY_API_KEY"
+seal monitoring alertmanager-webhook ALERTMANAGER_WEBHOOK_TOKEN "$ALERTMANAGER_WEBHOOK_TOKEN"
 seal model-serving llm-provider LLM_API_KEY "$LLM_API_KEY"
 seal aiops-agent agent-auth AIOPS_ACTION_TOKEN "$AIOPS_ACTION_TOKEN"
 seal_grafana

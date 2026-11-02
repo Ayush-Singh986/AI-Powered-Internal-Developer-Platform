@@ -33,11 +33,21 @@ spec:
               value: http://llm-gateway.llm-gateway.svc.cluster.local:8000
             - name: AGENT_URL
               value: http://aiops-agent.aiops-agent.svc.cluster.local:8000
-            - name: SERVICE_AUTH_TOKEN
+            - name: AGENT_SERVICE_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: service-auth
-                  key: SERVICE_AUTH_TOKEN
+                  name: agent-service-auth
+                  key: AGENT_SERVICE_TOKEN
+            - name: PORTAL_GATEWAY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: llm-gateway-auth
+                  key: PORTAL_GATEWAY_API_KEY
+            - name: AIOPS_ACTION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: agent-auth
+                  key: AIOPS_ACTION_TOKEN
             - name: GRAFANA_URL
               value: http://aiops.local/grafana
           readinessProbe:

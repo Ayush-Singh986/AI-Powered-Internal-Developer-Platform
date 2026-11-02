@@ -11,6 +11,8 @@ demo-down:
 
 test:
 	bash -c 'set -e; for service in rag model-serving llm-gateway aiops-agent; do (cd services/$$service && python -m unittest discover -s . -p "test_*.py" -v); done'
+	python -m unittest discover -s services/portal -p "test_*.py" -v
+	python -m unittest discover -s tests -p "test_*.py" -v
 	bash scripts/smoke-test.sh
 
 kind:

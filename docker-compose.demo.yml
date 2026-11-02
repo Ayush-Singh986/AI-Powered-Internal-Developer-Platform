@@ -7,26 +7,31 @@ services:
     environment:
       LLM_BASE_URL: http://mock-llm:8000/v1
       LLM_API_KEY: ""
-      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-demo-only-service-token}
+      MODEL_SERVICE_API_KEY: ${MODEL_SERVICE_API_KEY:-demo-only-model-token}
     depends_on:
       - mock-llm
 
   rag:
     environment:
-      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-demo-only-service-token}
+      RAG_SERVICE_TOKEN: ${RAG_SERVICE_TOKEN:-demo-only-rag-token}
 
   llm-gateway:
     environment:
-      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-demo-only-service-token}
+      LLM_GATEWAY_CLIENT_KEYS: ${LLM_GATEWAY_CLIENT_KEYS:-}
+      MODEL_SERVICE_API_KEY: ${MODEL_SERVICE_API_KEY:-demo-only-model-token}
       DAILY_TOKEN_LIMIT: ${DAILY_TOKEN_LIMIT:-100000}
 
   aiops-agent:
     environment:
-      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-demo-only-service-token}
+      AGENT_SERVICE_TOKEN: ${AGENT_SERVICE_TOKEN:-demo-only-agent-token}
+      LLM_GATEWAY_API_KEY: ${LLM_GATEWAY_API_KEY:-demo-only-gateway-token}
+      RAG_SERVICE_TOKEN: ${RAG_SERVICE_TOKEN:-demo-only-rag-token}
       AIOPS_ACTION_TOKEN: ${AIOPS_ACTION_TOKEN:-demo-only-action-token}
-      AUTO_REMEDIATE: "false"
+      ALERTMANAGER_WEBHOOK_TOKEN: ${ALERTMANAGER_WEBHOOK_TOKEN:-demo-only-webhook-token}
       ALLOWED_NAMESPACES: rag
 
   portal:
     environment:
-      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-demo-only-service-token}
+      AGENT_SERVICE_TOKEN: ${AGENT_SERVICE_TOKEN:-demo-only-agent-token}
+      PORTAL_GATEWAY_API_KEY: ${PORTAL_GATEWAY_API_KEY:-demo-only-portal-token}
+      AIOPS_ACTION_TOKEN: ${AIOPS_ACTION_TOKEN:-demo-only-action-token}

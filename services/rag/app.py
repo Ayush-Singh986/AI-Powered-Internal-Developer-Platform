@@ -13,12 +13,13 @@ REQUESTS = Counter("rag_retrieval_requests_total", "Retrieval requests")
 HTTP_REQUESTS = Counter("rag_http_requests_total", "HTTP requests", ["method", "status"])
 HTTP_LATENCY = Histogram("rag_http_request_duration_seconds", "HTTP request latency")
 DOCS_DIR = Path(os.getenv("DOCUMENTS_PATH", str(Path(__file__).parent / "runbooks")))
-SERVICE_API_KEY = os.getenv("SERVICE_AUTH_TOKEN") or os.getenv("SERVICE_API_KEY", "")
+SERVICE_API_KEY = os.getenv("RAG_SERVICE_TOKEN", "")
 
 
 class RetrievalRequest(BaseModel):
     query: str = Field(min_length=1, max_length=2000)
     limit: int = Field(default=3, ge=1, le=10)
+    alert_name: str | None = Field(default=None, max_length=128)
 
 
 @app.middleware("http")
@@ -45,7 +46,7 @@ def load_documents() -> list[dict[str, str]]:
 
 def require_service_token(authorization: str | None) -> None:
     if not SERVICE_API_KEY:
-        raise HTTPException(status_code=503, detail="SERVICE_AUTH_TOKEN is not configured")
+        raise HTTPException(status_code=503, detail="RAG_SERVICE_TOKEN is not configured")
     scheme, separator, token = (authorization or "").partition(" ")
     if scheme.lower() != "bearer" or not separator or not hmac.compare_digest(token, SERVICE_API_KEY):
         raise HTTPException(status_code=401, detail="Missing or invalid bearer token")
@@ -73,7 +74,24 @@ def retrieve(
     except (OSError, RuntimeError) as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     ranked = []
+    alert_runbooks = {
+        "ServiceDown": "service-down.md",
+        "GatewayProviderErrors": "gateway-provider-errors.md",
+        "GatewayErrorRate": "gateway-provider-errors.md",
+        "GatewayHighP95Latency": "high-latency.md",
+        "ContainerRestarting": "pod-restarts.md",
+        "ContainerOOMKilled": "memory-pressure.md",
+    }
+    preferred = alert_runbooks.get(request.alert_name or "")
+    if preferred:
+        ranked.extend(
+            {"id": document["id"], "text": document["text"], "score": 10000}
+            for document in documents
+            if document["id"] == preferred
+        )
     for document in documents:
+        if preferred and document["id"] == preferred:
+            continue
         text = document["text"]
         score = sum(text.casefold().count(term) for term in terms)
         if score:

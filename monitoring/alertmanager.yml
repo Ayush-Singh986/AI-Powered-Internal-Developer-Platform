@@ -4,6 +4,21 @@ route:
   group_wait: 10s
   group_interval: 1m
   repeat_interval: 4h
+  routes:
+    # Enable the Watchdog label and provide the URL file to turn on heartbeats.
+    - receiver: outside-webhook
+      matchers:
+        - 'external_heartbeat="enabled"'
+      repeat_interval: 1m
+      continue: true
+    - receiver: outside-webhook
+      matchers:
+        - 'external_notification="enabled"'
+      continue: true
+    - receiver: watchdog-ignored
+      matchers:
+        - 'alertname="Watchdog"'
+    - receiver: aiops-agent
 
 receivers:
   - name: aiops-agent
@@ -12,5 +27,13 @@ receivers:
         http_config:
           authorization:
             type: Bearer
-            credentials_file: /run/secrets/service-auth-token
-        send_resolved: false
+            credentials_file: /run/secrets/alertmanager-webhook-token
+        send_resolved: true
+  # Optional generic webhook. Mount a file containing its URL at this path and
+  # explicitly enable an alert's external_notification/external_heartbeat label.
+  - name: outside-webhook
+    webhook_configs:
+      - url_file: /etc/alertmanager/secrets/external-webhook-url
+        send_resolved: true
+  # Watchdog is intentionally suppressed locally unless its outside heartbeat is enabled.
+  - name: watchdog-ignored

@@ -25,11 +25,11 @@ spec:
             - name: http
               containerPort: 8000
           env:
-            - name: SERVICE_AUTH_TOKEN
+            - name: RAG_SERVICE_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: service-auth
-                  key: SERVICE_AUTH_TOKEN
+                  name: rag-auth
+                  key: RAG_SERVICE_TOKEN
             - name: DOCUMENTS_PATH
               value: /app/runbooks
           readinessProbe:

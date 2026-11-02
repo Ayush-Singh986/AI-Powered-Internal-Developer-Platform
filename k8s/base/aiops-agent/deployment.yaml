@@ -5,6 +5,8 @@ metadata:
   namespace: aiops-agent
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: aiops-agent
@@ -29,11 +31,26 @@ spec:
           env:
             - name: LLM_GATEWAY_URL
               value: http://llm-gateway.llm-gateway.svc.cluster.local:8000
-            - name: SERVICE_AUTH_TOKEN
+            - name: AGENT_SERVICE_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: service-auth
-                  key: SERVICE_AUTH_TOKEN
+                  name: agent-service-auth
+                  key: AGENT_SERVICE_TOKEN
+            - name: LLM_GATEWAY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: llm-gateway-auth
+                  key: LLM_GATEWAY_API_KEY
+            - name: RAG_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: rag-auth
+                  key: RAG_SERVICE_TOKEN
+            - name: ALERTMANAGER_WEBHOOK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: alertmanager-webhook
+                  key: ALERTMANAGER_WEBHOOK_TOKEN
             - name: AIOPS_ACTION_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -41,8 +58,6 @@ spec:
                   key: AIOPS_ACTION_TOKEN
             - name: DATABASE_PATH
               value: /data/incidents.db
-            - name: AUTO_REMEDIATE
-              value: "false"
             - name: ALLOWED_NAMESPACES
               value: rag
             - name: MAX_REPLICAS
@@ -53,6 +68,10 @@ spec:
               value: "3"
             - name: MAX_EVIDENCE_CHARS
               value: "10000"
+            - name: MAX_JOB_ATTEMPTS
+              value: "5"
+            - name: EVIDENCE_ENABLED_NAMESPACES
+              value: ""
           volumeMounts:
             - name: incident-data
               mountPath: /data

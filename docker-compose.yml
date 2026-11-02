@@ -3,7 +3,7 @@ services:
     build: ./services/rag
     environment:
       DOCUMENTS_PATH: /app/runbooks
-      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
+      RAG_SERVICE_TOKEN: ${RAG_SERVICE_TOKEN:-}
     ports:
       - "127.0.0.1:8001:8000"
     restart: unless-stopped
@@ -16,7 +16,6 @@ services:
       LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
       LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-60}
       MODEL_SERVICE_API_KEY: ${MODEL_SERVICE_API_KEY:-}
-      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
     ports:
       - "127.0.0.1:8002:8000"
     restart: unless-stopped
@@ -26,11 +25,15 @@ services:
     environment:
       MODEL_SERVICE_URL: http://model-serving:8000
       MODEL_SERVICE_API_KEY: ${MODEL_SERVICE_API_KEY:-}
-      LLM_GATEWAY_API_KEY: ${LLM_GATEWAY_API_KEY:-}
-      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
+      LLM_GATEWAY_CLIENT_KEYS: ${LLM_GATEWAY_CLIENT_KEYS:-}
       INPUT_COST_PER_1K_TOKENS_USD: ${INPUT_COST_PER_1K_TOKENS_USD:-}
       OUTPUT_COST_PER_1K_TOKENS_USD: ${OUTPUT_COST_PER_1K_TOKENS_USD:-}
       DAILY_TOKEN_LIMIT: ${DAILY_TOKEN_LIMIT:-100000}
+      CALLER_DAILY_TOKEN_LIMIT: ${CALLER_DAILY_TOKEN_LIMIT:-100000}
+      MAX_CALLS_PER_MINUTE: ${MAX_CALLS_PER_MINUTE:-30}
+      MAX_INPUT_BYTES: ${MAX_INPUT_BYTES:-16000}
+      MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-32768}
+      MODEL_FALLBACK_URL: ${MODEL_FALLBACK_URL:-}
       GATEWAY_DATABASE_PATH: /data/gateway.db
     volumes:
       - gateway-data:/data
@@ -45,11 +48,17 @@ services:
     environment:
       LLM_GATEWAY_URL: http://llm-gateway:8000
       LLM_GATEWAY_API_KEY: ${LLM_GATEWAY_API_KEY:-}
-      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
+      RAG_SERVICE_TOKEN: ${RAG_SERVICE_TOKEN:-}
+      AGENT_SERVICE_TOKEN: ${AGENT_SERVICE_TOKEN:-}
       AIOPS_ACTION_TOKEN: ${AIOPS_ACTION_TOKEN:-}
+      ALERTMANAGER_WEBHOOK_TOKEN: ${ALERTMANAGER_WEBHOOK_TOKEN:-}
       DATABASE_PATH: /data/incidents.db
-      AUTO_REMEDIATE: ${AUTO_REMEDIATE:-false}
       ALLOWED_NAMESPACES: ${ALLOWED_NAMESPACES:-rag}
+      EVIDENCE_ENABLED_NAMESPACES: ${EVIDENCE_ENABLED_NAMESPACES:-}
+      MAX_EVIDENCE_CHARS: ${MAX_EVIDENCE_CHARS:-10000}
+      ALERT_MAX_BODY_BYTES: ${ALERT_MAX_BODY_BYTES:-1048576}
+      ALERT_MAX_BATCH_SIZE: ${ALERT_MAX_BATCH_SIZE:-100}
+      MAX_JOB_ATTEMPTS: ${MAX_JOB_ATTEMPTS:-5}
       MAX_REPLICAS: ${MAX_REPLICAS:-5}
       MAX_LLM_CALLS_PER_HOUR: ${MAX_LLM_CALLS_PER_HOUR:-20}
       MAX_ACTIONS_PER_HOUR: ${MAX_ACTIONS_PER_HOUR:-3}
@@ -68,7 +77,9 @@ services:
       MODEL_URL: http://model-serving:8000
       GATEWAY_URL: http://llm-gateway:8000
       AGENT_URL: http://aiops-agent:8000
-      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
+      AGENT_SERVICE_TOKEN: ${AGENT_SERVICE_TOKEN:-}
+      PORTAL_GATEWAY_API_KEY: ${PORTAL_GATEWAY_API_KEY:-}
+      AIOPS_ACTION_TOKEN: ${AIOPS_ACTION_TOKEN:-}
       RAG_PUBLIC_URL: http://localhost:8001/docs
       MODEL_PUBLIC_URL: http://localhost:8002/docs
       GATEWAY_PUBLIC_URL: http://localhost:8003/docs
@@ -106,7 +117,7 @@ services:
     volumes:
       - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
     secrets:
-      - service-auth-token
+      - alertmanager-webhook-token
     ports:
       - "127.0.0.1:9093:9093"
     depends_on:
@@ -131,5 +142,5 @@ volumes:
   grafana-data:
 
 secrets:
-  service-auth-token:
-    environment: SERVICE_AUTH_TOKEN
+  alertmanager-webhook-token:
+    environment: ALERTMANAGER_WEBHOOK_TOKEN

@@ -1,20 +1,22 @@
 # AIOps DevOps Platform
 
 A GitOps-managed platform that turns Kubernetes alerts into evidence-backed,
-AI-assisted incident diagnoses and records any allow-listed remediation.
+AI-assisted incident diagnoses, then requires explicit human approval for
+allow-listed remediation.
 
 **Demo GIF:** not recorded yet; no live capture is being presented as evidence.
 
 ## What happens when a service fails?
 
 Prometheus and Alertmanager deliver an alert to the AIOps agent. The agent
-deduplicates repeat alerts, collects bounded pod-log and Kubernetes-event
-evidence, retrieves a relevant runbook, and requests a diagnosis through the
-LLM gateway and model adapter. It stores the incident and action audit for the
-portal to display. The agent never executes model-generated commands.
+persists and acknowledges it immediately, then a background worker retrieves
+an alert-specific runbook and requests a structured diagnosis. Evidence
+collection is opt-in per namespace. The portal displays suggestions; no
+remediation runs until an operator approves the exact allow-listed action.
 
-The gateway authenticates internal calls, tracks provider-reported token use,
-and enforces a daily token budget. On kind, the adapter uses a canned mock
+The gateway authenticates distinct named clients, atomically reserves tokens,
+limits prompt sizes and per-client request rates, and applies bounded retry,
+fallback, and in-memory caching. On kind, the adapter uses a canned mock
 provider by default, so a learner can deploy the stack without a paid LLM key.
 
 ## Architecture
@@ -79,17 +81,17 @@ Desktop integration enabled.
 | Prometheus and Alertmanager | Scrape `/metrics`, group alerts, and send firing alerts to the agent's authenticated webhook. |
 | Runbook retrieval (`services/rag`) | Searches bundled Markdown runbooks lexically; it does not use embeddings or a vector database. |
 | Model adapter (`services/model-serving`) | Calls an OpenAI-compatible provider. It does not host model weights. On kind and in the local demo, it calls the canned mock provider. |
-| LLM gateway | Authenticates internal requests, forwards completions, stores provider-reported token usage, and blocks requests after the configured UTC daily token budget. |
-| AIOps agent | Deduplicates alerts, gathers bounded pod logs/events/deployment evidence, requests diagnosis, and records incidents and remediation attempts. |
+| LLM gateway | Authenticates named clients, reserves token budget atomically, enforces input/rate limits, and routes requests with optional fallback and bounded response caching. |
+| AIOps agent | Durably queues and deduplicates alerts, retries diagnoses, supports opt-in evidence, records model suggestions, and enforces human approval for actions. |
 | SQLite | Stores gateway token totals and agent incident/action history for this single-replica demo. |
 | Operations portal | Displays service health, Grafana links, and the incident feed. It receives no provider API key. |
 | Argo CD and Terraform | Argo CD reconciles Git-managed Kubernetes state. Terraform provisions the demo EKS infrastructure; it does not generate application findings. |
 
-The diagnosis is advice, not an executable command. Remediation is disabled by
-default; only an explicit allow-listed action can be attempted, the agent has
-Kubernetes patch permissions only in the `rag` namespace, and action limits
-and audit records are applied. The agent has read-only evidence access in the
-monitored namespaces.
+Model output is an advisory JSON suggestion, never an action command.
+Alertmanager has a distinct webhook credential. Only known alert/target pairs
+can receive action suggestions, and the agent has Kubernetes patch permissions
+only in the `rag` namespace. The portal uses OAuth2 Proxy and fetches incident
+evidence only after an operator reveals it.
 
 ## Complete deployment walkthrough
 
@@ -166,13 +168,19 @@ sealed credentials for service authentication and Grafana.
    cannot use an uncommitted local URL. If `make kind-up` detects that these
    files still need updating, it will make the local edit, print instructions,
    and stop for this commit/push.
-4. **Create cluster credentials.** In the same Bash session, enter a strong
-   shared service token, action token, and Grafana password. The prompts hide
-   the values; they are exported for the deployment command:
+4. **Create cluster credentials.** In the same Bash session, enter a unique
+   random token for each service, the action token, webhook token, and Grafana
+   password. The prompts hide the values:
 
    ```bash
-   read -r -s -p "Shared service token: " SERVICE_AUTH_TOKEN; printf '\n'; export SERVICE_AUTH_TOKEN
+   read -r -s -p "RAG service token: " RAG_SERVICE_TOKEN; printf '\n'; export RAG_SERVICE_TOKEN
+   read -r -s -p "Model service token: " MODEL_SERVICE_API_KEY; printf '\n'; export MODEL_SERVICE_API_KEY
+   read -r -s -p "Gateway token for agent: " LLM_GATEWAY_API_KEY; printf '\n'; export LLM_GATEWAY_API_KEY
+   read -r -s -p "Gateway token for portal: " PORTAL_GATEWAY_API_KEY; printf '\n'; export PORTAL_GATEWAY_API_KEY
+   export LLM_GATEWAY_CLIENT_KEYS="{\"agent\":\"$LLM_GATEWAY_API_KEY\",\"portal\":\"$PORTAL_GATEWAY_API_KEY\"}"
+   read -r -s -p "Agent service token: " AGENT_SERVICE_TOKEN; printf '\n'; export AGENT_SERVICE_TOKEN
    read -r -s -p "Action approval token: " AIOPS_ACTION_TOKEN; printf '\n'; export AIOPS_ACTION_TOKEN
+   read -r -s -p "Alertmanager webhook token: " ALERTMANAGER_WEBHOOK_TOKEN; printf '\n'; export ALERTMANAGER_WEBHOOK_TOKEN
    read -r -s -p "Grafana password: " GRAFANA_ADMIN_PASSWORD; printf '\n'; export GRAFANA_ADMIN_PASSWORD
    ```
 
@@ -295,24 +303,31 @@ Bash/PowerShell guide is in [docs/deployment.md](docs/deployment.md).
    Terraform creates the VPC, EKS cluster and node group, ECR repositories,
    and supporting IAM/add-on resources. The remote state bucket is separate
    and is not removed by `terraform destroy`.
-4. **Allow GitHub Actions to publish images.** In AWS IAM, configure the
-   GitHub Actions OIDC provider and a role restricted to this repository.
-   Grant the role only the access needed for the Terraform plan/state and ECR
-   image-publishing workflows; do not store long-lived AWS access keys in
-   GitHub. In the repository's **Settings → Secrets and variables → Actions**,
-   add:
+4. **Configure GitHub Actions OIDC roles.** Create separate AWS IAM roles
+   restricted to this repository's GitHub OIDC identity: one with ECR
+   image-publish permissions and one for the manually dispatched Terraform
+   plan and remote state. Do not store long-lived AWS access keys in GitHub.
+   Pull requests run Terraform formatting and validation without AWS
+   credentials; only a manual plan dispatch from `main` assumes the plan role.
+   In the repository's **Settings → Secrets and variables → Actions**, add:
 
-   - Secret `AWS_TERRAFORM_ROLE_ARN`: the OIDC role ARN.
+   - Secret `AWS_ECR_PUBLISH_ROLE_ARN`: the ECR publishing role ARN.
+   - Secret `AWS_TERRAFORM_PLAN_ROLE_ARN`: the Terraform plan/state role ARN.
    - Variables `AWS_REGION` and `TF_STATE_BUCKET`: the values used above.
    - Variables `AWS_PROJECT_NAME` and `AWS_ENVIRONMENT`: the same values as
      `project_name` and `environment` in `terraform/terraform.tfvars`.
    - Variable `CLUSTER_ADMIN_CIDRS`: a Terraform list, for example
      `["203.0.113.10/32"]`, matching the operator CIDR in `terraform.tfvars`.
+   - Variable `BUDGET_ALERT_EMAIL`: the billing contact for AWS budget alerts.
+   - Optional variable `MONTHLY_BUDGET_LIMIT`: the monthly USD budget (default
+     `200`).
 
-   The Terraform pull-request workflow also assumes this role. Because the
-   role can publish images, only allow trusted pull requests in its OIDC trust
-   policy; use a separate read-only role/workflow for untrusted pull requests.
-   The image-publishing workflows assume the role on `main`.
+   The plan role needs access to the Terraform state bucket and lock file, plus
+   read-only access to the AWS resources queried by `terraform plan`; it must
+   not be trusted by image-publishing workflows. The ECR role should be
+   limited to the five service repositories. Image-publishing workflows run
+   on `main`, scan the image, then open a pull request for the Kubernetes
+   digest-pinned image change instead of pushing directly to `main`.
 5. **Point Argo CD at the repository.** Replace the repository placeholders,
    then commit and push this change before bootstrapping Argo CD:
 
@@ -329,9 +344,10 @@ Bash/PowerShell guide is in [docs/deployment.md](docs/deployment.md).
 6. **Build and publish the five service images.** In GitHub **Actions**, run
    each `Build ...` workflow on branch `main`: AIOps agent, LLM gateway,
    model serving, portal, and RAG. Each workflow tests and scans its service,
-   pushes a commit-SHA-tagged image to ECR, and commits the image tag to
-   `k8s/base/`. Wait for all five runs to pass before proceeding. These
-   workflows support both pushes to service paths and manual dispatch.
+   pushes an immutable commit-SHA image to ECR, and opens a pull request
+   updating the manifest to that image's digest. Review and merge each image
+   update pull request before proceeding. These workflows support both pushes
+   to service paths and manual dispatch.
 7. **Connect to EKS and install Argo CD.** Get the cluster credentials and
    install the repository's pinned Argo CD release, then apply the root
    Application:
@@ -359,8 +375,14 @@ Bash/PowerShell guide is in [docs/deployment.md](docs/deployment.md).
 
    ```bash
    read -r -s -p "Provider API key: " LLM_API_KEY; printf '\n'; export LLM_API_KEY
-   read -r -s -p "Shared service token: " SERVICE_AUTH_TOKEN; printf '\n'; export SERVICE_AUTH_TOKEN
+   read -r -s -p "RAG service token: " RAG_SERVICE_TOKEN; printf '\n'; export RAG_SERVICE_TOKEN
+   read -r -s -p "Model service token: " MODEL_SERVICE_API_KEY; printf '\n'; export MODEL_SERVICE_API_KEY
+   read -r -s -p "Gateway token for agent: " LLM_GATEWAY_API_KEY; printf '\n'; export LLM_GATEWAY_API_KEY
+   read -r -s -p "Gateway token for portal: " PORTAL_GATEWAY_API_KEY; printf '\n'; export PORTAL_GATEWAY_API_KEY
+   export LLM_GATEWAY_CLIENT_KEYS="{\"agent\":\"$LLM_GATEWAY_API_KEY\",\"portal\":\"$PORTAL_GATEWAY_API_KEY\"}"
+   read -r -s -p "Agent service token: " AGENT_SERVICE_TOKEN; printf '\n'; export AGENT_SERVICE_TOKEN
    read -r -s -p "Action approval token: " AIOPS_ACTION_TOKEN; printf '\n'; export AIOPS_ACTION_TOKEN
+   read -r -s -p "Alertmanager webhook token: " ALERTMANAGER_WEBHOOK_TOKEN; printf '\n'; export ALERTMANAGER_WEBHOOK_TOKEN
    read -r -s -p "Grafana password: " GRAFANA_ADMIN_PASSWORD; printf '\n'; export GRAFANA_ADMIN_PASSWORD
    scripts/seal-secrets.sh eks
    git add k8s/sealed-secrets/eks
@@ -413,9 +435,8 @@ Bash/PowerShell guide is in [docs/deployment.md](docs/deployment.md).
 - Provider credentials and service/action tokens are runtime secrets. The
   repository contains a Sealed Secrets generation script, not plaintext keys
   or a made-up sealed ciphertext.
-- Internal services currently share one service token. This is a known
-  limitation: compromise of one service can expose calls to other internal
-  routes; use separate per-service credentials before production.
+- Internal service, action, portal, and webhook credentials are distinct and
+  sealed per cluster. Rotate them independently.
 - `/health` and `/metrics` remain open for probes and scraping. Model and
   gateway completion routes, runbook retrieval, the incident feed, and the
   Alertmanager webhook require bearer authentication.
@@ -423,12 +444,13 @@ Bash/PowerShell guide is in [docs/deployment.md](docs/deployment.md).
   manifests are present, and Terraform configures the EKS VPC CNI network
   policy option, but enforcement has not been tested on either cluster. kind's
   default CNI does **not** enforce NetworkPolicies.
-- Remediation is disabled by default. Only restart/scale actions are accepted,
-  only `rag` has patch permissions, replica count is capped, and every
+- Model actions are suggestions only. Human approvals are recorded, actions
+  are restricted to allow-listed targets, replica count is capped, and each
   action/refusal is timestamped. The agent has read-only evidence permissions
   in the monitored service namespaces.
-- The gateway's daily token cap and the agent's LLM/action hourly caps are
-  backed by SQLite. The gateway database is persisted in its own volume/PVC.
+- The gateway's daily/per-client token budgets and the agent's incident queue,
+  retention, LLM/action limits are backed by SQLite. Both deployments use one
+  replica and `Recreate`; do not scale them horizontally.
 
 See [docs/security.md](docs/security.md) for implemented controls, automated
 checks, and live checks that remain pending.
@@ -466,18 +488,21 @@ deployment-specific evidence are in [docs/deployment.md](docs/deployment.md).
 
 - The demo provider is deterministic and is not suitable for measuring model
   quality, latency, or cost.
-- Runbook search is lexical. The model adapter calls an external provider and
-  does not support offline inference outside the canned kind/local demo.
-- SQLite is not a multi-replica database. There is no user identity provider,
-  production TLS policy, or external heartbeat receiver configured.
+- Runbook search is lexical with alert-name mappings. The model adapter calls
+  an OpenAI-compatible endpoint; point it at a compatible local model for
+  restricted environments.
+- SQLite is not a multi-replica database. OIDC issuer credentials, TLS
+  certificates, and an external heartbeat URL must be configured by the
+  operator before public/prod use. External notifications are disabled by
+  default.
+- AWS nodes use private subnets and a NAT gateway. Instance sizes are a
+  configurable starting point, not measured capacity. Configure a real email
+  and monthly limit for the Terraform budget alert.
 - The Sealed Secrets controller creates a different encryption key per
   cluster. kind and EKS each need their own sealed manifests; none can be
   produced or validated without access to the target cluster.
-- All 25 service unit tests and the Docker Compose smoke test pass. The smoke
-  test exposed and helped fix non-root SQLite volume permissions in the agent
-  and gateway images. The interactive demo started, but its full endpoint
-  check could not be completed because the WSL environment timed out. kind,
-  kubectl, and Helm are unavailable, so Kubernetes/EKS acceptance is still
-  unverified.
-
-
+- Unit suites cover the asynchronous queue, resolved/reopened incidents,
+  retries, action approval, evidence privacy, runbook selection, gateway
+  reservations/limits/fallback/cache, and monitoring configuration. The
+  current Docker Compose smoke and Kubernetes/EKS acceptance checks have not
+  been run in this environment; do not treat them as passing.

@@ -33,11 +33,11 @@ spec:
                 secretKeyRef:
                   name: llm-provider
                   key: LLM_API_KEY
-            - name: SERVICE_AUTH_TOKEN
+            - name: MODEL_SERVICE_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: service-auth
-                  key: SERVICE_AUTH_TOKEN
+                  name: model-serving-auth
+                  key: MODEL_SERVICE_API_KEY
           readinessProbe:
             httpGet:
               path: /health

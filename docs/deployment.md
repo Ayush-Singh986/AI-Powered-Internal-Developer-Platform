@@ -24,9 +24,9 @@ project directory:
 5. Stop the demo with `make demo-down`.
 
 For a real provider in Compose, copy `.env.example` to `.env`, set the
-provider URL/model/key, a strong Grafana password, `SERVICE_AUTH_TOKEN`,
-`AIOPS_ACTION_TOKEN`, and a positive `DAILY_TOKEN_LIMIT`. Keep `.env`
-untracked. Compose refuses to start Grafana when its password is empty.
+provider URL/model/key, a strong Grafana password, distinct service tokens,
+and positive gateway budgets. Keep `.env` untracked. Compose refuses to start
+Grafana when its password is empty.
 
 ## 2. Deploy to local Kubernetes with kind and Argo CD
 
@@ -56,12 +56,19 @@ the change and rerun the target.
 ### Prepare credentials and launch
 
 kind runs the model adapter against the canned mock provider. No paid LLM key
-is needed. The sealed `LLM_API_KEY` is empty in this demo mode. Enter strong
-service, action, and Grafana credentials in the shell that will run Make:
+is needed. The sealed `LLM_API_KEY` is empty in this demo mode. Enter a unique
+random token for each service, the action token, webhook token, and Grafana
+password in the shell that will run Make:
 
 ```bash
-read -r -s -p "Shared service token: " SERVICE_AUTH_TOKEN; printf '\n'; export SERVICE_AUTH_TOKEN
+read -r -s -p "RAG service token: " RAG_SERVICE_TOKEN; printf '\n'; export RAG_SERVICE_TOKEN
+read -r -s -p "Model service token: " MODEL_SERVICE_API_KEY; printf '\n'; export MODEL_SERVICE_API_KEY
+read -r -s -p "Gateway token for agent: " LLM_GATEWAY_API_KEY; printf '\n'; export LLM_GATEWAY_API_KEY
+read -r -s -p "Gateway token for portal: " PORTAL_GATEWAY_API_KEY; printf '\n'; export PORTAL_GATEWAY_API_KEY
+export LLM_GATEWAY_CLIENT_KEYS="{\"agent\":\"$LLM_GATEWAY_API_KEY\",\"portal\":\"$PORTAL_GATEWAY_API_KEY\"}"
+read -r -s -p "Agent service token: " AGENT_SERVICE_TOKEN; printf '\n'; export AGENT_SERVICE_TOKEN
 read -r -s -p "Action approval token: " AIOPS_ACTION_TOKEN; printf '\n'; export AIOPS_ACTION_TOKEN
+read -r -s -p "Alertmanager webhook token: " ALERTMANAGER_WEBHOOK_TOKEN; printf '\n'; export ALERTMANAGER_WEBHOOK_TOKEN
 read -r -s -p "Grafana password: " GRAFANA_ADMIN_PASSWORD; printf '\n'; export GRAFANA_ADMIN_PASSWORD
 ```
 
@@ -105,6 +112,14 @@ not enforce NetworkPolicies; enforcement has not been tested on kind or EKS.
 The EKS Terraform configuration sets the VPC CNI network-policy option, but
 that configuration is not proof of enforcement.
 
+The portal Ingress requires the operator-provisioned `oauth2-proxy-config`,
+`oauth2-proxy-credentials`, and `aiops-local-tls` resources. Configure the OIDC
+issuer and callback URL for the final HTTPS host before exposing it. The
+optional external Alertmanager receiver requires a monitoring-namespace
+`external-webhook-url` Secret with key `url`; apply
+`k8s/base/monitoring/alertmanager-external.yaml` only after that URL is
+configured. Watchdog external delivery is not enabled by default.
+
 Delete the local cluster when finished:
 
 ```bash
@@ -143,6 +158,9 @@ aws s3api put-bucket-encryption --bucket "$TF_STATE_BUCKET" \
 cp terraform/backend.hcl.example terraform/backend.hcl
 cp terraform/terraform.tfvars.example terraform/terraform.tfvars
 # Edit the backend bucket, region, EKS version, node type, and operator CIDR.
+# Provide the real billing contact and choose a monthly budget.
+read -r -s -p "AWS budget alert email: " TF_VAR_budget_alert_email; printf '\n'; export TF_VAR_budget_alert_email
+export TF_VAR_monthly_budget_limit=200
 terraform -chdir=terraform init -backend-config=backend.hcl
 terraform -chdir=terraform validate
 terraform -chdir=terraform plan
@@ -164,6 +182,8 @@ aws s3api put-bucket-encryption --bucket $env:TF_STATE_BUCKET `
 Copy-Item terraform/backend.hcl.example terraform/backend.hcl
 Copy-Item terraform/terraform.tfvars.example terraform/terraform.tfvars
 # Edit the backend bucket, region, EKS version, node type, and operator CIDR.
+$env:TF_VAR_budget_alert_email = Read-Host "AWS budget alert email"
+$env:TF_VAR_monthly_budget_limit = "200"
 terraform -chdir=terraform init -backend-config=backend.hcl
 terraform -chdir=terraform validate
 terraform -chdir=terraform plan
@@ -171,10 +191,14 @@ terraform -chdir=terraform apply
 ```
 
 Confirm the EKS Kubernetes version is still supported in your region before
-applying. Workers use public subnets without NAT to reduce demo baseline cost;
-this is not a production network design. A public ingress load balancer,
-nodes, persistent volumes, image storage, and data transfer can still incur
-charges. The VPC CNI add-on is configured to enable NetworkPolicies.
+applying. Worker nodes use private subnets with one NAT gateway; public
+subnets are reserved for ingress/load balancers. The default node group uses
+two `t3.large` instances and can scale to four, but this is an initial demo
+baseline, not a workload measurement. The AWS Budget emails at 80% actual and
+100% forecast of the configured monthly limit; it does not cap or stop spend.
+NAT, public load balancers, nodes, persistent volumes, image storage, and data
+transfer can still incur charges. The VPC CNI add-on enables the NetworkPolicy
+feature, but policy enforcement still requires runtime verification.
 
 ### Publish images and bootstrap Argo CD
 
@@ -187,23 +211,27 @@ Configure these repository **Actions variables**:
 | `AWS_ENVIRONMENT` | The same value as `environment` in `terraform.tfvars`. |
 | `TF_STATE_BUCKET` | The private S3 bucket used for Terraform state. |
 | `CLUSTER_ADMIN_CIDRS` | A Terraform list of allowed operator CIDRs, e.g. `["203.0.113.10/32"]`. |
+| `BUDGET_ALERT_EMAIL` | The address that receives AWS budget notifications. |
+| `MONTHLY_BUDGET_LIMIT` | Optional monthly USD budget; defaults to `200`. |
 
-Add the repository **Actions secret** `AWS_TERRAFORM_ROLE_ARN` with the ARN
-of an IAM role configured for GitHub Actions OIDC. Restrict its trust policy
-to this repository and the intended branch/workflows; grant only the S3 state
-and ECR permissions the workflows need. Do not add long-lived AWS access
-keys. The Terraform pull-request workflow also assumes this role, so its
-`pull_request` OIDC subject must be trusted if that workflow is enabled. Since
-the role can publish ECR images, only allow trusted pull requests or use a
-separate read-only role for Terraform plans.
+Add repository **Actions secrets** `AWS_ECR_PUBLISH_ROLE_ARN` and
+`AWS_TERRAFORM_PLAN_ROLE_ARN`, each pointing to a separate GitHub Actions OIDC
+role. Restrict the ECR role to the five service repositories and the `main`
+branch. The Terraform role is used only by a manually dispatched plan on
+`main`; scope it to the state bucket/lock file and read-only AWS permissions
+needed for planning. Pull requests run `fmt` and `validate` without AWS
+credentials. Do not add long-lived AWS access keys.
 
-Each service workflow tests, scans, and publishes a commit-SHA image to ECR,
-then commits the new image reference to `k8s/base/`. To publish the initial
-images after creating the ECR repositories, manually run each `Build ...`
+Each service workflow tests, scans, and publishes an immutable commit-SHA
+image to ECR, then opens a pull request pinning the new image digest in
+`k8s/base/`; review
+and merge that GitOps change rather than allowing automation to push directly
+to `main`. To publish the initial images after creating the ECR repositories,
+manually run each `Build ...`
 workflow on branch `main` from GitHub Actions: AIOps agent, LLM gateway,
 model serving, portal, and RAG. The workflows also run on service-source
-pushes to `main`. Their push filters do not match `k8s/**`-only commits, and
-the GitOps manifest commits are marked `[skip ci]`.
+pushes to `main`. Their path filters ignore the resulting `k8s/**`-only image
+update pull requests.
 
 Configure the repo URL once with the platform repository's actual owner and
 name, then commit and push:
@@ -228,8 +256,14 @@ Git:
 
 ```bash
 read -r -s -p "Provider API key: " LLM_API_KEY; printf '\n'; export LLM_API_KEY
-read -r -s -p "Shared service token: " SERVICE_AUTH_TOKEN; printf '\n'; export SERVICE_AUTH_TOKEN
+read -r -s -p "RAG service token: " RAG_SERVICE_TOKEN; printf '\n'; export RAG_SERVICE_TOKEN
+read -r -s -p "Model service token: " MODEL_SERVICE_API_KEY; printf '\n'; export MODEL_SERVICE_API_KEY
+read -r -s -p "Gateway token for agent: " LLM_GATEWAY_API_KEY; printf '\n'; export LLM_GATEWAY_API_KEY
+read -r -s -p "Gateway token for portal: " PORTAL_GATEWAY_API_KEY; printf '\n'; export PORTAL_GATEWAY_API_KEY
+export LLM_GATEWAY_CLIENT_KEYS="{\"agent\":\"$LLM_GATEWAY_API_KEY\",\"portal\":\"$PORTAL_GATEWAY_API_KEY\"}"
+read -r -s -p "Agent service token: " AGENT_SERVICE_TOKEN; printf '\n'; export AGENT_SERVICE_TOKEN
 read -r -s -p "Action approval token: " AIOPS_ACTION_TOKEN; printf '\n'; export AIOPS_ACTION_TOKEN
+read -r -s -p "Alertmanager webhook token: " ALERTMANAGER_WEBHOOK_TOKEN; printf '\n'; export ALERTMANAGER_WEBHOOK_TOKEN
 read -r -s -p "Grafana password: " GRAFANA_ADMIN_PASSWORD; printf '\n'; export GRAFANA_ADMIN_PASSWORD
 scripts/seal-secrets.sh eks
 git add k8s/sealed-secrets/eks

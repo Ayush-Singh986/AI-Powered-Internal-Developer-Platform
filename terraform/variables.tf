@@ -34,7 +34,26 @@ variable "vpc_cidr" {
 }
 
 variable "node_instance_types" {
-  description = "EC2 instance types for the small demo node group."
+  description = "EC2 instance types for the private EKS node group."
   type        = list(string)
-  default     = ["t3.medium"]
+  default     = ["t3.large"]
+}
+
+variable "monthly_budget_limit" {
+  description = "Monthly AWS cost threshold in USD for the budget alert."
+  type        = number
+  default     = 200
+  validation {
+    condition     = var.monthly_budget_limit > 0
+    error_message = "monthly_budget_limit must be greater than zero."
+  }
+}
+
+variable "budget_alert_email" {
+  description = "Email address that receives AWS monthly budget alerts."
+  type        = string
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.budget_alert_email))
+    error_message = "budget_alert_email must be a valid email address."
+  }
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-token="${SERVICE_AUTH_TOKEN:-demo-only-service-token}"
+token="${ALERTMANAGER_WEBHOOK_TOKEN:-demo-only-webhook-token}"
 agent_url="${AIOPS_AGENT_URL:-http://127.0.0.1:8004}"
 fingerprint="demo-quickstart-$(date +%s)"
 

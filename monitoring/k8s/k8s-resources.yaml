@@ -86,6 +86,31 @@ spec:
   groups:
     - name: aiops-platform
       rules:
+        - alert: ServiceDown
+          expr: |
+            label_replace(
+              up{job=~"rag|model-serving|llm-gateway|aiops-agent"} == 0,
+              "deployment", "$1", "job", "(rag|model-serving|llm-gateway|aiops-agent)"
+            )
+          for: 1m
+          labels:
+            severity: warning
+            namespace: '{{ $labels.namespace }}'
+            deployment: '{{ $labels.deployment }}'
+          annotations:
+            summary: A monitored service is unavailable
+            description: Prometheus cannot scrape {{ $labels.namespace }}/{{ $labels.deployment }} (job {{ $labels.job }}).
+        - alert: AIOpsAgentDown
+          expr: up{job="aiops-agent"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            namespace: aiops-agent
+            deployment: aiops-agent
+            external_notification: enabled
+          annotations:
+            summary: AIOps agent is unavailable
+            description: Prometheus cannot scrape the AIOps agent.
         - alert: GatewayProviderErrors
           expr: increase(llm_gateway_requests_total{outcome="error"}[5m]) > 2
           for: 1m
@@ -93,17 +118,69 @@ spec:
             severity: warning
             namespace: llm-gateway
             deployment: llm-gateway
+            external_notification: enabled
           annotations:
             summary: LLM gateway requests are failing
             description: More than two model-service requests failed within five minutes.
-        - alert: ServiceDown
-          expr: up{job=~"rag|model-serving|llm-gateway|aiops-agent"} == 0
+        - alert: GatewayErrorRate
+          expr: |
+            (
+              sum(increase(llm_gateway_requests_total{outcome="error"}[5m]))
+              /
+              sum(increase(llm_gateway_requests_total[5m]))
+            ) > 0.1
+            and
+            sum(increase(llm_gateway_requests_total{outcome="error"}[5m])) > 2
+          for: 1m
+          labels:
+            severity: warning
+            namespace: llm-gateway
+            deployment: llm-gateway
+          annotations:
+            summary: LLM gateway error rate is high
+            description: More than 10% of gateway requests failed, with at least three failures, in the last five minutes.
+        - alert: GatewayHighP95Latency
+          expr: histogram_quantile(0.95, sum by (le) (rate(llm_request_duration_seconds_bucket[5m]))) > 2
+          for: 5m
+          labels:
+            severity: warning
+            namespace: llm-gateway
+            deployment: llm-gateway
+          annotations:
+            summary: LLM gateway p95 latency is high
+            description: The gateway's p95 end-to-end request latency has exceeded two seconds for five minutes.
+        - alert: ContainerRestarting
+          expr: |
+            label_replace(
+              increase(kube_pod_container_status_restarts_total{namespace=~"rag|model-serving|llm-gateway|aiops-agent"}[15m]) > 0,
+              "deployment", "$1", "pod", "^(.+)-[a-z0-9]{9,10}-[a-z0-9]{5}$"
+            )
           for: 1m
           labels:
             severity: warning
           annotations:
-            summary: A monitored service is unavailable
-            description: Prometheus cannot scrape {{ $labels.job }}.
+            summary: A service container restarted
+            description: Container {{ $labels.container }} in {{ $labels.namespace }}/{{ $labels.deployment }} restarted within the last 15 minutes.
+        - alert: ContainerOOMKilled
+          expr: |
+            label_replace(
+              kube_pod_container_status_last_terminated_reason{reason="OOMKilled",namespace=~"rag|model-serving|llm-gateway|aiops-agent"} == 1,
+              "deployment", "$1", "pod", "^(.+)-[a-z0-9]{9,10}-[a-z0-9]{5}$"
+            )
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: A service container was terminated for out-of-memory
+            description: Container {{ $labels.container }} in {{ $labels.namespace }}/{{ $labels.deployment }} was OOM-killed.
+        - alert: Watchdog
+          expr: vector(1)
+          labels:
+            severity: info
+            external_heartbeat: enabled
+          annotations:
+            summary: Prometheus is sending alerts
+            description: This continuously firing alert confirms the monitoring pipeline is operating.
 ---
 apiVersion: monitoring.coreos.com/v1alpha1
 kind: AlertmanagerConfig
@@ -119,6 +196,12 @@ spec:
     groupWait: 10s
     groupInterval: 1m
     repeatInterval: 4h
+    routes:
+      - receiver: watchdog-ignored
+        matchers:
+          - name: alertname
+            value: Watchdog
+            matchType: "="
   receivers:
     - name: aiops-agent
       webhookConfigs:
@@ -126,7 +209,9 @@ spec:
           httpConfig:
             authorization:
               type: Bearer
+              # Secret alertmanager-webhook/ALERTMANAGER_WEBHOOK_TOKEN lives in monitoring.
               credentials:
-                name: service-auth
-                key: SERVICE_AUTH_TOKEN
-          sendResolved: false
+                name: alertmanager-webhook
+                key: ALERTMANAGER_WEBHOOK_TOKEN
+          sendResolved: true
+    - name: watchdog-ignored

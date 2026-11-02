@@ -22,6 +22,20 @@ class RagServiceTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["results"][0]["id"], "pod-restarts.md")
 
+    def test_alert_name_selects_matching_runbook(self):
+        with patch.object(app, "SERVICE_API_KEY", "rag-token"):
+            response = TestClient(app.app).post(
+                "/retrieve",
+                json={
+                    "query": "service unavailable",
+                    "alert_name": "ServiceDown",
+                    "limit": 1,
+                },
+                headers={"Authorization": "Bearer rag-token"},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["results"][0]["id"], "service-down.md")
+
     def test_retrieval_requires_service_authentication(self):
         with patch.object(app, "SERVICE_API_KEY", "service-token"):
             response = TestClient(app.app).post(

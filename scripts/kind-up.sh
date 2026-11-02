@@ -8,7 +8,13 @@ if [[ $# -ne 1 || ! "$1" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
   exit 2
 fi
 
-: "${SERVICE_AUTH_TOKEN:?export SERVICE_AUTH_TOKEN before running make kind-up}"
+: "${RAG_SERVICE_TOKEN:?export RAG_SERVICE_TOKEN before running make kind-up}"
+: "${MODEL_SERVICE_API_KEY:?export MODEL_SERVICE_API_KEY before running make kind-up}"
+: "${LLM_GATEWAY_API_KEY:?export LLM_GATEWAY_API_KEY before running make kind-up}"
+: "${PORTAL_GATEWAY_API_KEY:?export PORTAL_GATEWAY_API_KEY before running make kind-up}"
+: "${LLM_GATEWAY_CLIENT_KEYS:?export LLM_GATEWAY_CLIENT_KEYS before running make kind-up}"
+: "${AGENT_SERVICE_TOKEN:?export AGENT_SERVICE_TOKEN before running make kind-up}"
+: "${ALERTMANAGER_WEBHOOK_TOKEN:?export ALERTMANAGER_WEBHOOK_TOKEN before running make kind-up}"
 : "${AIOPS_ACTION_TOKEN:?export AIOPS_ACTION_TOKEN before running make kind-up}"
 : "${GRAFANA_ADMIN_PASSWORD:?export GRAFANA_ADMIN_PASSWORD before running make kind-up}"
 

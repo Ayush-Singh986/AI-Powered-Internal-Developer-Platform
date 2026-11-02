@@ -2,5 +2,9 @@ resources:
   - namespace.yaml
   - deployment.yaml
   - service.yaml
+  - oauth2-proxy.yaml
+  - oauth2-proxy-service.yaml
   - ingress.yaml
+  - oauth2-ingress.yaml
   - network-policy.yaml
+  - oauth2-network-policy.yaml

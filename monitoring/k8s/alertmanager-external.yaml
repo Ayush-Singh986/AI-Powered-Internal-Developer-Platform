@@ -1,0 +1,38 @@
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: aiops-external-webhook
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  # Apply only after creating Secret external-webhook-url (key url) in monitoring.
+  # This optional config is intentionally not in kustomization.yaml.
+  route:
+    receiver: external-webhook-suppressed
+    groupBy: ["alertname", "namespace", "deployment"]
+    groupWait: 10s
+    groupInterval: 1m
+    repeatInterval: 4h
+    routes:
+      - receiver: outside-webhook
+        matchers:
+          - name: external_notification
+            value: enabled
+            matchType: "="
+        continue: true
+      - receiver: outside-webhook
+        matchers:
+          - name: external_heartbeat
+            value: enabled
+            matchType: "="
+        repeatInterval: 1m
+        continue: true
+  receivers:
+    - name: external-webhook-suppressed
+    - name: outside-webhook
+      webhookConfigs:
+        - urlSecret:
+            name: external-webhook-url
+            key: url
+          sendResolved: true

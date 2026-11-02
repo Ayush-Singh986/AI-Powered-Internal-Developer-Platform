@@ -5,6 +5,8 @@ metadata:
   namespace: llm-gateway
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: llm-gateway
@@ -32,11 +34,16 @@ spec:
               value: ""
             - name: OUTPUT_COST_PER_1K_TOKENS_USD
               value: ""
-            - name: SERVICE_AUTH_TOKEN
+            - name: LLM_GATEWAY_CLIENT_KEYS
               valueFrom:
                 secretKeyRef:
-                  name: service-auth
-                  key: SERVICE_AUTH_TOKEN
+                  name: llm-gateway-auth
+                  key: LLM_GATEWAY_CLIENT_KEYS
+            - name: MODEL_SERVICE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: model-serving-auth
+                  key: MODEL_SERVICE_API_KEY
             - name: DAILY_TOKEN_LIMIT
               value: "100000"
             - name: GATEWAY_DATABASE_PATH
