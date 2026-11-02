@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-serving
+  namespace: model-serving
+spec:
+  template:
+    spec:
+      containers:
+        - name: model-serving
+          image: local/aiops-model-serving:sha-placeholder
+          imagePullPolicy: IfNotPresent

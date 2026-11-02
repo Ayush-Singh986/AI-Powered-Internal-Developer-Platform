@@ -1,0 +1,8 @@
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - deployment.yaml
+  - service.yaml
+  - pvc.yaml
+  - storageclass.yaml
+  - network-policy.yaml

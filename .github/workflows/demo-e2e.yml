@@ -1,0 +1,17 @@
+name: Demo end-to-end smoke test
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Run no-key Compose smoke test
+        run: bash scripts/smoke-test.sh

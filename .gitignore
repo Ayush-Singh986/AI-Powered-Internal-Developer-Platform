@@ -1,0 +1,9 @@
+.env
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+terraform/backend.hcl
+__pycache__/
+.pytest_cache/
+*.py[cod]

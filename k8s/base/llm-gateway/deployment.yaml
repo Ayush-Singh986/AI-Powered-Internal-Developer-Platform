@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-gateway
+  namespace: llm-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: llm-gateway
+  template:
+    metadata:
+      labels:
+        app: llm-gateway
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: llm-gateway
+          image: ghcr.io/OWNER/REPO/llm-gateway:sha-placeholder
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: MODEL_SERVICE_URL
+              value: http://model-serving.model-serving.svc.cluster.local:8000
+            - name: INPUT_COST_PER_1K_TOKENS_USD
+              value: ""
+            - name: OUTPUT_COST_PER_1K_TOKENS_USD
+              value: ""
+            - name: SERVICE_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: service-auth
+                  key: SERVICE_AUTH_TOKEN
+            - name: DAILY_TOKEN_LIMIT
+              value: "100000"
+            - name: GATEWAY_DATABASE_PATH
+              value: /data/gateway.db
+          volumeMounts:
+            - name: gateway-data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: gateway-data
+          persistentVolumeClaim:
+            claimName: llm-gateway-data

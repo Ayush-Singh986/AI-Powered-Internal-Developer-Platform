@@ -1,0 +1,7 @@
+resources:
+  - ../../../base/rag
+patches:
+  - path: image.yaml
+images:
+  - name: local/aiops-rag
+    newTag: sha-placeholder

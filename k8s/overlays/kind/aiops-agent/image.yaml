@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aiops-agent
+  namespace: aiops-agent
+spec:
+  template:
+    spec:
+      containers:
+        - name: aiops-agent
+          image: local/aiops-agent:sha-placeholder
+          imagePullPolicy: IfNotPresent

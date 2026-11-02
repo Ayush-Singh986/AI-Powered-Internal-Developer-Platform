@@ -1,0 +1,32 @@
+services:
+  mock-llm:
+    build: ./services/mock-llm
+    restart: unless-stopped
+
+  model-serving:
+    environment:
+      LLM_BASE_URL: http://mock-llm:8000/v1
+      LLM_API_KEY: ""
+      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-demo-only-service-token}
+    depends_on:
+      - mock-llm
+
+  rag:
+    environment:
+      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-demo-only-service-token}
+
+  llm-gateway:
+    environment:
+      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-demo-only-service-token}
+      DAILY_TOKEN_LIMIT: ${DAILY_TOKEN_LIMIT:-100000}
+
+  aiops-agent:
+    environment:
+      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-demo-only-service-token}
+      AIOPS_ACTION_TOKEN: ${AIOPS_ACTION_TOKEN:-demo-only-action-token}
+      AUTO_REMEDIATE: "false"
+      ALLOWED_NAMESPACES: rag
+
+  portal:
+    environment:
+      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-demo-only-service-token}

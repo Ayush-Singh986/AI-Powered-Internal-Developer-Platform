@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portal
+  namespace: portal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: portal
+  template:
+    metadata:
+      labels:
+        app: portal
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: portal
+          image: ghcr.io/OWNER/REPO/portal:sha-placeholder
+          ports:
+            - name: http
+              containerPort: 8501
+          env:
+            - name: RAG_URL
+              value: http://rag.rag.svc.cluster.local:8000
+            - name: MODEL_URL
+              value: http://model-serving.model-serving.svc.cluster.local:8000
+            - name: GATEWAY_URL
+              value: http://llm-gateway.llm-gateway.svc.cluster.local:8000
+            - name: AGENT_URL
+              value: http://aiops-agent.aiops-agent.svc.cluster.local:8000
+            - name: SERVICE_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: service-auth
+                  key: SERVICE_AUTH_TOKEN
+            - name: GRAFANA_URL
+              value: http://aiops.local/grafana
+          readinessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: http
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]

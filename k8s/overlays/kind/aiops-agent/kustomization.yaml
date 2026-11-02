@@ -1,0 +1,15 @@
+resources:
+  - ../../../base/aiops-agent
+patches:
+  - path: image.yaml
+  - path: storage.yaml
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: aiops-agent
+      namespace: aiops-agent
+  - path: remove-persistent-resources.yaml
+images:
+  - name: local/aiops-agent
+    newTag: sha-placeholder

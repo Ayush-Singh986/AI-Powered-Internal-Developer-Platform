@@ -1,0 +1,12 @@
+resources:
+  - infra/ingress-nginx.yaml
+  - infra/kube-prometheus-stack.yaml
+  - infra/sealed-secrets.yaml
+  - infra/metrics-server.yaml
+  - infra/sealed-secrets-config.yaml
+  - monitoring.yaml
+  - rag.yaml
+  - model-serving.yaml
+  - llm-gateway.yaml
+  - aiops-agent.yaml
+  - portal.yaml

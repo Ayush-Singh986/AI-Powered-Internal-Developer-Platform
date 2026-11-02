@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aiops-agent
+  namespace: aiops-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aiops-agent
+  template:
+    metadata:
+      labels:
+        app: aiops-agent
+    spec:
+      serviceAccountName: aiops-agent
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: aiops-agent
+          image: ghcr.io/OWNER/REPO/aiops-agent:sha-placeholder
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: LLM_GATEWAY_URL
+              value: http://llm-gateway.llm-gateway.svc.cluster.local:8000
+            - name: SERVICE_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: service-auth
+                  key: SERVICE_AUTH_TOKEN
+            - name: AIOPS_ACTION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: agent-auth
+                  key: AIOPS_ACTION_TOKEN
+            - name: DATABASE_PATH
+              value: /data/incidents.db
+            - name: AUTO_REMEDIATE
+              value: "false"
+            - name: ALLOWED_NAMESPACES
+              value: rag
+            - name: MAX_REPLICAS
+              value: "5"
+            - name: MAX_LLM_CALLS_PER_HOUR
+              value: "20"
+            - name: MAX_ACTIONS_PER_HOUR
+              value: "3"
+            - name: MAX_EVIDENCE_CHARS
+              value: "10000"
+          volumeMounts:
+            - name: incident-data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: incident-data
+          persistentVolumeClaim:
+            claimName: aiops-agent-data

@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portal
+  namespace: portal
+spec:
+  template:
+    spec:
+      containers:
+        - name: portal
+          image: local/aiops-portal:sha-placeholder
+          imagePullPolicy: IfNotPresent

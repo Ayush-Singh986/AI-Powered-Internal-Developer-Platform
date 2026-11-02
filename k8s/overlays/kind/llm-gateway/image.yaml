@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-gateway
+  namespace: llm-gateway
+spec:
+  template:
+    spec:
+      containers:
+        - name: llm-gateway
+          image: local/aiops-llm-gateway:sha-placeholder
+          imagePullPolicy: IfNotPresent

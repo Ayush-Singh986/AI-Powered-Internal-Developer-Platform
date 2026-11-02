@@ -1,0 +1,95 @@
+name: Reusable service build
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  test-build-scan-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install service dependencies
+        run: pip install -r services/${{ inputs.service }}/requirements.txt
+
+      - name: Run unit tests
+        working-directory: services/${{ inputs.service }}
+        run: python -m unittest discover -s . -p 'test_*.py' -v
+
+      - name: Set image name
+        id: image
+        shell: bash
+        run: echo "name=aiops/${{ inputs.service }}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Build image for scanning
+        uses: docker/build-push-action@v6
+        with:
+          context: services/${{ inputs.service }}
+          load: true
+          tags: ${{ steps.image.outputs.name }}
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.image.outputs.name }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+
+      - name: Configure AWS credentials
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Push immutable image tag
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: push
+        shell: bash
+        run: |
+          IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ vars.AWS_PROJECT_NAME }}-${{ vars.AWS_ENVIRONMENT }}/${{ inputs.service }}:${GITHUB_SHA}"
+          if ! aws ecr describe-images --repository-name "${{ vars.AWS_PROJECT_NAME }}-${{ vars.AWS_ENVIRONMENT }}/${{ inputs.service }}" --image-ids imageTag="${GITHUB_SHA}" >/dev/null 2>&1; then
+            docker tag "${{ steps.image.outputs.name }}" "$IMAGE"
+            docker push "$IMAGE"
+          fi
+          echo "name=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Update GitOps image tag
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          IMAGE="${{ steps.push.outputs.name }}"
+          sed -i -E "s#^[[:space:]]*image:.*#          image: ${IMAGE}#" "k8s/base/${{ inputs.service }}/deployment.yaml"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "k8s/base/${{ inputs.service }}/deployment.yaml"
+          if git diff --cached --quiet; then
+            echo "Manifest already references this image; nothing to commit."
+            exit 0
+          fi
+          git commit -m "chore(gitops): update ${{ inputs.service }} image to ${GITHUB_SHA} [skip ci]" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+          git fetch origin main
+          git rebase origin/main
+          git push

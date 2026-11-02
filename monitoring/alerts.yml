@@ -1,0 +1,21 @@
+groups:
+  - name: service-health
+    rules:
+      - alert: ServiceDown
+        expr: up{job=~"rag|model-serving|llm-gateway|aiops-agent"} == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "A monitored service is unavailable"
+          description: "Prometheus cannot scrape {{ $labels.job }}."
+      - alert: GatewayProviderErrors
+        expr: increase(llm_gateway_requests_total{outcome="error"}[5m]) > 2
+        for: 1m
+        labels:
+          severity: warning
+          namespace: llm-gateway
+          deployment: llm-gateway
+        annotations:
+          summary: "LLM gateway requests are failing"
+          description: "More than two model-service requests failed within five minutes."

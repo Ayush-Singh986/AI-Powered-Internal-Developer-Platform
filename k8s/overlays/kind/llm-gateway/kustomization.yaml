@@ -1,0 +1,15 @@
+resources:
+  - ../../../base/llm-gateway
+patches:
+  - path: image.yaml
+  - path: storage.yaml
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: llm-gateway
+      namespace: llm-gateway
+  - path: remove-persistent-resources.yaml
+images:
+  - name: local/aiops-llm-gateway
+    newTag: sha-placeholder

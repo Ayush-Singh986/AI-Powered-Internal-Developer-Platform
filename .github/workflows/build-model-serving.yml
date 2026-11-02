@@ -1,0 +1,16 @@
+name: Build model-serving
+on:
+  push:
+    branches: [main]
+    paths: ["services/model-serving/**", ".github/workflows/build-model-serving.yml", ".github/workflows/_build-service.yml"]
+  pull_request:
+    paths: ["services/model-serving/**", ".github/workflows/build-model-serving.yml", ".github/workflows/_build-service.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+  id-token: write
+jobs:
+  service:
+    uses: ./.github/workflows/_build-service.yml
+    with:
+      service: model-serving

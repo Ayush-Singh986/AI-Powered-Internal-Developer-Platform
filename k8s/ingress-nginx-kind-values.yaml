@@ -1,0 +1,8 @@
+controller:
+  kind: DaemonSet
+  hostPort:
+    enabled: true
+  service:
+    type: NodePort
+  nodeSelector:
+    kubernetes.io/hostname: aiops-local-control-plane

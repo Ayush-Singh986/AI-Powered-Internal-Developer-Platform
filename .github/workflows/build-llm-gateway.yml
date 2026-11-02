@@ -1,0 +1,16 @@
+name: Build llm-gateway
+on:
+  push:
+    branches: [main]
+    paths: ["services/llm-gateway/**", ".github/workflows/build-llm-gateway.yml", ".github/workflows/_build-service.yml"]
+  pull_request:
+    paths: ["services/llm-gateway/**", ".github/workflows/build-llm-gateway.yml", ".github/workflows/_build-service.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+  id-token: write
+jobs:
+  service:
+    uses: ./.github/workflows/_build-service.yml
+    with:
+      service: llm-gateway

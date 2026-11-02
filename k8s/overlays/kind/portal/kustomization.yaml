@@ -1,0 +1,7 @@
+resources:
+  - ../../../base/portal
+patches:
+  - path: image.yaml
+images:
+  - name: local/aiops-portal
+    newTag: sha-placeholder

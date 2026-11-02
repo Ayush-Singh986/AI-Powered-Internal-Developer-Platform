@@ -1,0 +1,132 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rag
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames: ["rag"]
+  selector:
+    matchLabels:
+      app: rag
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: model-serving
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames: ["model-serving"]
+  selector:
+    matchLabels:
+      app: model-serving
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: llm-gateway
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames: ["llm-gateway"]
+  selector:
+    matchLabels:
+      app: llm-gateway
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: aiops-agent
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames: ["aiops-agent"]
+  selector:
+    matchLabels:
+      app: aiops-agent
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: aiops-platform-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: aiops-platform
+      rules:
+        - alert: GatewayProviderErrors
+          expr: increase(llm_gateway_requests_total{outcome="error"}[5m]) > 2
+          for: 1m
+          labels:
+            severity: warning
+            namespace: llm-gateway
+            deployment: llm-gateway
+          annotations:
+            summary: LLM gateway requests are failing
+            description: More than two model-service requests failed within five minutes.
+        - alert: ServiceDown
+          expr: up{job=~"rag|model-serving|llm-gateway|aiops-agent"} == 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: A monitored service is unavailable
+            description: Prometheus cannot scrape {{ $labels.job }}.
+---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: aiops-webhook
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  route:
+    receiver: aiops-agent
+    groupBy: ["alertname", "namespace", "deployment"]
+    groupWait: 10s
+    groupInterval: 1m
+    repeatInterval: 4h
+  receivers:
+    - name: aiops-agent
+      webhookConfigs:
+        - url: http://aiops-agent.aiops-agent.svc.cluster.local:8000/alerts
+          httpConfig:
+            authorization:
+              type: Bearer
+              credentials:
+                name: service-auth
+                key: SERVICE_AUTH_TOKEN
+          sendResolved: false

@@ -1,0 +1,9 @@
+resources:
+  - ../../../base/model-serving
+  - mock-llm.yaml
+patches:
+  - path: image.yaml
+  - path: kind-config.yaml
+images:
+  - name: local/aiops-model-serving
+    newTag: sha-placeholder

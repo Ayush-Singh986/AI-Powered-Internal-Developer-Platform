@@ -1,0 +1,102 @@
+{
+  "title": "AIOps Platform Overview",
+  "uid": "aiops-overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "type": "timeseries", "title": "Requests / second",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "sum(rate(rag_http_requests_total[5m]))", "legendFormat": "RAG" },
+        { "expr": "sum(rate(model_http_requests_total[5m]))", "legendFormat": "Model" },
+        { "expr": "sum(rate(gateway_http_requests_total[5m]))", "legendFormat": "Gateway" },
+        { "expr": "sum(rate(aiops_http_requests_total[5m]))", "legendFormat": "AIOps agent" }
+      ]
+    },
+    {
+      "id": 2, "type": "timeseries", "title": "HTTP 5xx errors / second",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "sum(rate(rag_http_requests_total{status=~\"5..\"}[5m]))", "legendFormat": "RAG" },
+        { "expr": "sum(rate(model_http_requests_total{status=~\"5..\"}[5m]))", "legendFormat": "Model" },
+        { "expr": "sum(rate(gateway_http_requests_total{status=~\"5..\"}[5m]))", "legendFormat": "Gateway" },
+        { "expr": "sum(rate(aiops_http_requests_total{status=~\"5..\"}[5m]))", "legendFormat": "AIOps agent" }
+      ]
+    },
+    {
+      "id": 3, "type": "timeseries", "title": "Service p95 latency",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(rag_http_request_duration_seconds_bucket[5m])))", "legendFormat": "RAG" },
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(model_http_request_duration_seconds_bucket[5m])))", "legendFormat": "Model" },
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(gateway_http_request_duration_seconds_bucket[5m])))", "legendFormat": "Gateway" },
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(aiops_http_request_duration_seconds_bucket[5m])))", "legendFormat": "AIOps agent" }
+      ]
+    },
+    {
+      "id": 4, "type": "timeseries", "title": "Provider-reported tokens",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "sum(rate(llm_tokens_total{type=\"input\"}[5m]))", "legendFormat": "Input tokens/s" },
+        { "expr": "sum(rate(llm_tokens_total{type=\"output\"}[5m]))", "legendFormat": "Output tokens/s" }
+      ]
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Estimated spend (USD / hour)",
+      "description": "Only populated when provider-specific token rates are configured; see pricing status below.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [{ "expr": "sum(increase(llm_cost_usd_total[1h]))", "legendFormat": "USD in last hour" }]
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "AIOps alerts and actions",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        { "expr": "sum(increase(aiops_alerts_received_total[1h]))", "legendFormat": "Alerts" },
+        { "expr": "sum(increase(aiops_actions_total[1h]))", "legendFormat": "Actions" }
+      ]
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Scrape health (1 = up)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "targets": [{ "expr": "up{job=~\"rag|model-serving|llm-gateway|aiops-agent\"}", "legendFormat": "{{job}}" }]
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "Ready pods by namespace (Kubernetes)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "targets": [{ "expr": "sum by (namespace) (kube_pod_status_ready{condition=\"true\"})", "legendFormat": "{{namespace}}" }]
+    },
+    {
+      "id": 9, "type": "timeseries", "title": "Container restarts / hour (Kubernetes)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+      "targets": [{ "expr": "sum by (namespace) (increase(kube_pod_container_status_restarts_total[1h]))", "legendFormat": "{{namespace}}" }]
+    },
+    {
+      "id": 10, "type": "stat", "title": "LLM pricing configuration",
+      "description": "Cost estimates are intentionally omitted until both provider-specific rates are set.",
+      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 40 },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": { "text": "rates not configured", "color": "orange" },
+                "1": { "text": "rates configured", "color": "green" }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [{ "expr": "llm_cost_rates_configured", "legendFormat": "pricing" }]
+    },
+    {
+      "id": 11, "type": "stat", "title": "Budget rejections (last hour)",
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 40 },
+      "targets": [{ "expr": "sum(increase(llm_budget_exceeded_total[1h]))", "legendFormat": "rejected requests" }]
+    }
+  ]
+}

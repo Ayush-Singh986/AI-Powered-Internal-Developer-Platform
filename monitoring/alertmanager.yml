@@ -1,0 +1,16 @@
+route:
+  receiver: aiops-agent
+  group_by: ["alertname", "namespace", "deployment"]
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 4h
+
+receivers:
+  - name: aiops-agent
+    webhook_configs:
+      - url: http://aiops-agent:8000/alerts
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /run/secrets/service-auth-token
+        send_resolved: false
